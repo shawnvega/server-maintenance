@@ -4,14 +4,12 @@ Ansible automation for managing home servers.
 
 ## Servers Managed
 
-| Host | Description |
-|---|---|
-| `192.168.4.4` | Home server |
-| `192.168.4.5` | Home server |
-| `192.168.4.18` | Home server |
-| `192.168.4.19` | Home server |
-
-User: `shawn`
+| Host | User | OS | Backup Method |
+|---|---|---|---|
+| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) |
+| `192.168.4.18` | `shawn` | Debian (Pi OS) | None |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None |
 
 ---
 
@@ -25,24 +23,30 @@ Test SSH ping across all 4 servers:
 ./run.sh ping
 ```
 
-### 2. Run Upgrade Across All Servers
-Runs `source ~/bin/upgradeEverything.sh` in parallel on all servers:
+### 2. Backup Only
+Run `rpi-clone` only on the servers that have backups configured:
 ```bash
-./run.sh upgrade
+./run.sh backup -K
 ```
 
-### 3. Target a Single Server (e.g. for testing)
-```bash
-./run.sh upgrade --limit 192.168.4.4
-```
-
-### 4. Run with Sudo Password Prompt
-If your upgrade script requires `sudo` privileges:
+### 3. Run Full Pipeline (Backup + Upgrade)
+Runs pre-upgrade backup first, then runs upgrade across all servers:
 ```bash
 ./run.sh upgrade -K
 ```
 
-### 5. Run Arbitrary Ad-hoc Commands
+### 4. Upgrade Without Backup
+Skip the backup stage and immediately run upgrades:
+```bash
+./run.sh upgrade --skip-tags backup
+```
+
+### 5. Target a Single Server
+```bash
+./run.sh upgrade --limit 192.168.4.4 -K
+```
+
+### 6. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -57,7 +61,8 @@ If you prefer activating the virtual environment directly:
 ```bash
 source .venv/bin/activate
 ansible-playbook ping.yml
-ansible-playbook upgrade.yml
+ansible-playbook backup.yml -K
+ansible-playbook upgrade.yml -K
 ```
 
 ## Structure
@@ -66,10 +71,11 @@ ansible-playbook upgrade.yml
 .
 ├── .gitignore
 ├── ansible.cfg        # Ansible defaults (inventory, yaml output, SSH pipelining)
-├── inventory.ini      # Server hosts & connection variables
+├── inventory.ini      # Server hosts & backup variables
 ├── ping.yml           # Connectivity check playbook
+├── backup.yml         # Dedicated backup playbook
 ├── requirements.txt   # Python dependencies
 ├── run.sh             # Convenience CLI wrapper
-├── upgrade.yml        # Main upgrade playbook
+├── upgrade.yml        # Main upgrade playbook (with pre-upgrade backup tag)
 └── .venv/             # Local Python virtual environment (gitignored)
 ```

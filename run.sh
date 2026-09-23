@@ -21,13 +21,16 @@ usage() {
   echo ""
   echo "Commands:"
   echo "  ping                 Test SSH connectivity to all servers"
+  echo "  backup               Run backup (rpi-clone) on configured servers"
   echo "  upgrade              Run upgradeEverything.sh across all servers"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
   echo "Examples:"
   echo "  $0 ping"
-  echo "  $0 upgrade"
+  echo "  $0 backup                          # Run backup only"
+  echo "  $0 upgrade                         # Run backup + upgrade"
+  echo "  $0 upgrade --skip-tags backup      # Upgrade without backup"
   echo "  $0 upgrade --limit 192.168.4.4     # Run on single server only"
   echo "  $0 upgrade -K                      # Prompt for sudo password"
   echo "  $0 raw 'uptime'"
@@ -44,6 +47,9 @@ shift || true
 case "${CMD}" in
   ping)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/ping.yml" "$@"
+    ;;
+  backup)
+    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/backup.yml" "$@"
     ;;
   upgrade)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" "$@"

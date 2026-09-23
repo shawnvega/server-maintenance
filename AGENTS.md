@@ -4,12 +4,12 @@
 This repository manages automation and configuration for self-hosted home servers using Ansible in a project-local Python virtual environment (`.venv`).
 
 ### Managed Hosts
-| Host | User | Role |
-|---|---|---|
-| `192.168.4.4` | `shawn` | Home server |
-| `192.168.4.5` | `shawn` | Home server |
-| `192.168.4.18` | `shawn` | Home server |
-| `192.168.4.19` | `shawn` | Home server |
+| Host | User | OS | Backup Method | Role |
+|---|---|---|---|---|
+| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Home server (glances, immich, jellyfin, syncthing) |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Home server (glances, etc.) |
+| `192.168.4.18` | `shawn` | Debian (Pi OS) | None | Home server (glances, etc.) |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Home server (glances0, etc.) |
 
 ---
 
@@ -27,16 +27,21 @@ This repository manages automation and configuration for self-hosted home server
 ./run.sh ping
 ```
 
-### Upgrade Playbook
+### Backup Only
 ```bash
-# Run across all servers concurrently
-./run.sh upgrade
+./run.sh backup -K
+```
+
+### Upgrade Playbook (with Backup Tag)
+```bash
+# Run backup + upgrade across servers
+./run.sh upgrade -K
+
+# Run upgrade without backup
+./run.sh upgrade --skip-tags backup
 
 # Target a single server
-./run.sh upgrade --limit 192.168.4.4
-
-# Prompt for sudo password if required
-./run.sh upgrade -K
+./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
 ### Ad-hoc Shell Execution
@@ -53,16 +58,18 @@ This repository manages automation and configuration for self-hosted home server
 ---
 
 ## File Structure & Conventions
-* `inventory.ini`: Server definitions and connection parameters.
+* `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`), and connection parameters.
 * `ansible.cfg`: Core Ansible configuration (inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
-* `upgrade.yml`: Playbook that executes `~/bin/upgradeEverything.sh` asynchronously with polling.
+* `backup.yml`: Dedicated playbook for `rpi-clone` backups.
+* `upgrade.yml`: Playbook that executes pre-upgrade backups and `~/bin/upgradeEverything.sh` asynchronously with polling.
 * `ping.yml`: Quick connectivity verification playbook.
 * `run.sh`: Main entrypoint for humans and automation.
 * `requirements.txt`: Python package requirements.
+* `AGENTS.md` / `CLAUDE.md`: Repository instructions and conventions for AI assistants.
 * `.gitignore`: Excludes `.venv/`, `.ansible/`, retry files, and system logs.
 
 ### Guidelines for AI Agents
 1. **Always use `.venv` or `./run.sh`**: Never invoke global `ansible` directly.
 2. **Validate Syntax Before Commits**: Run `.venv/bin/ansible-playbook <playbook> --syntax-check` when creating or modifying playbooks.
-3. **Respect Safety Checks**: When writing tasks that execute scripts on remote hosts, verify file existence (`ansible.builtin.stat`) and use reasonable timeouts / async polling.
+3. **Respect Safety Checks**: Verify host variables before running hardware/backup operations like `rpi-clone`.
 4. **Preserve `local_tmp` in `ansible.cfg`**: Keep temporary directory pointing to `./.ansible/tmp` to avoid sandbox and permission issues with `/Users/shawn/.ansible`.

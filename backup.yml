@@ -1,0 +1,25 @@
+---
+- name: Run backups across home servers
+  hosts: servers
+  gather_facts: false
+
+  tasks:
+    - name: Run rpi-clone backup (requires root/sudo)
+      when: backup_method | default('none') == 'rpi-clone'
+      become: true
+      ansible.builtin.command:
+        cmd: "rpi-clone -u -v {{ backup_device }}"
+      register: clone_result
+      # rpi-clone can take several minutes; async up to 30 mins, poll every 15s
+      async: 1800
+      poll: 15
+
+    - name: Display backup summary
+      when: backup_method | default('none') == 'rpi-clone'
+      ansible.builtin.debug:
+        var: clone_result.stdout_lines
+
+    - name: Report hosts without backup configured
+      when: backup_method | default('none') == 'none'
+      ansible.builtin.debug:
+        msg: "No backup method configured for {{ inventory_hostname }}. Skipping."
