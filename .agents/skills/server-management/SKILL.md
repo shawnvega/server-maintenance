@@ -60,12 +60,12 @@ Targets `192.168.4.11` running Debian/Pi OS with an active OverlayFS.
 1. Detect overlay status (`raspi-config nonint get_overlay_now`).
 2. Switch configuration to Read/Write (`raspi-config nonint do_overlayfs 1`).
 3. Reboot and poll until SSH recovers.
-4. Verify filesystem is Read/Write (`rc == 1`).
+4. Verify filesystem is Read/Write (`stdout == '1'`).
 5. Wait for system loadavg to drop below `load_threshold`.
 6. Upgrade OS packages (`apt update && apt full-upgrade -y && apt autoremove`).
 7. Switch configuration back to Read-Only (`raspi-config nonint do_overlayfs 0`).
 8. Reboot and poll until SSH recovers.
-9. Verify filesystem is safely Read-Only (`rc == 0`).
+9. Verify filesystem is safely Read-Only (`stdout == '0'`).
 
 ### D. Dedicated Backups (`rpi-clone`)
 Run hardware backups to destination SD/NVMe/USB storage:
@@ -111,8 +111,8 @@ Execute commands across all nodes or targeted servers:
   ```bash
   ssh shawn@192.168.4.11 'sudo raspi-config nonint get_overlay_now'
   ```
-  - Exit code `0` = Overlay active (Read-Only).
-  - Exit code `1` = Overlay disabled (Read/Write).
+  - Output `0` = Overlay active (Read-Only).
+  - Output `1` = Overlay disabled (Read/Write).
 * To manually force back into Read-Only mode:
   ```bash
   ssh shawn@192.168.4.11 'sudo raspi-config nonint do_overlayfs 0 && sudo reboot'

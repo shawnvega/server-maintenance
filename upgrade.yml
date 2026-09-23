@@ -20,7 +20,7 @@
       ansible.builtin.debug:
         msg: "Current 1-min load: {{ current_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
 
-    - name: Wait for system load to drop below threshold
+    - name: "Wait for system load to drop below threshold (<= {{ load_threshold | default(4.0) }})"
       tags: [load_check]
       when: (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
       ansible.builtin.shell:
