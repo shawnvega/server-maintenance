@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project Overview
-This repository manages automation and configuration for self-hosted home servers using Ansible in a project-local Python virtual environment (`.venv`).
+This repository manages automation and configuration for self-hosted home servers natively using Ansible in a project-local Python virtual environment (`.venv`).
 
 ### Managed Hosts
 | Host | User | OS | Backup Method | Containers / Workloads |
@@ -20,6 +20,14 @@ This repository manages automation and configuration for self-hosted home server
 
 ---
 
+## Upgrade Pipeline Stages (`upgrade.yml`)
+1. **Load Check (`tags: [load_check]`)**: Waits for loadavg to drop below `load_threshold`.
+2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
+3. **OS Upgrades (`tags: [os]`)**: Uses `apt` for Debian/Pi OS and `dnf` for Fedora.
+4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then `docker compose up -d`).
+
+---
+
 ## Common Commands
 
 ### Connectivity Check
@@ -27,21 +35,23 @@ This repository manages automation and configuration for self-hosted home server
 ./run.sh ping
 ```
 
-### Backup Only
+### Full Upgrade Pipeline
 ```bash
-./run.sh backup -K
+./run.sh upgrade -K
 ```
 
-### Upgrade Playbook (with Backup Tag)
+### Selective Execution via Tags
 ```bash
-# Run backup + upgrade across servers
-./run.sh upgrade -K
+./run.sh upgrade --tags docker            # Only update containers
+./run.sh upgrade --tags os -K             # Only OS package upgrades
+./run.sh upgrade --tags backup -K         # Only backups
+./run.sh upgrade --skip-tags backup -K    # Upgrade without backup
+./run.sh upgrade --limit 192.168.4.4 -K   # Single host
+```
 
-# Run upgrade without backup
-./run.sh upgrade --skip-tags backup
-
-# Target a single server
-./run.sh upgrade --limit 192.168.4.4 -K
+### Dedicated Backup Only
+```bash
+./run.sh backup -K
 ```
 
 ### Ad-hoc Shell Execution
@@ -58,10 +68,10 @@ This repository manages automation and configuration for self-hosted home server
 ---
 
 ## File Structure & Conventions
-* `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`), and connection parameters.
+* `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`, `load_threshold`, `docker_stacks`), and connection parameters.
 * `ansible.cfg`: Core Ansible configuration (inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
+* `upgrade.yml`: Native multi-stage upgrade playbook.
 * `backup.yml`: Dedicated playbook for `rpi-clone` backups.
-* `upgrade.yml`: Playbook that executes pre-upgrade backups and `~/bin/upgradeEverything.sh` asynchronously with polling.
 * `ping.yml`: Quick connectivity verification playbook.
 * `run.sh`: Main entrypoint for humans and automation.
 * `requirements.txt`: Python package requirements.

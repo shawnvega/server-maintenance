@@ -1,10 +1,26 @@
 ---
-- name: Upgrade all home servers
+- name: Upgrade all home servers natively
   hosts: servers
-  gather_facts: false
+  gather_facts: true
 
   tasks:
-    - name: Run pre-upgrade backup (rpi-clone)
+    # -------------------------------------------------------------
+    # Stage 1: System Load Check
+    # -------------------------------------------------------------
+    - name: Wait for system load to drop below threshold
+      tags: [load_check]
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: load_out
+      until: (load_out.stdout | float) <= (load_threshold | default(4.0) | float)
+      retries: 20
+      delay: 30
+      changed_when: false
+
+    # -------------------------------------------------------------
+    # Stage 2: Backup (rpi-clone)
+    # -------------------------------------------------------------
+    - name: Run pre-upgrade backup via rpi-clone
       tags: [backup]
       when: backup_method | default('none') == 'rpi-clone'
       become: true
@@ -20,28 +36,50 @@
       ansible.builtin.debug:
         var: clone_result.stdout_lines
 
-    - name: Check if upgrade script exists
-      tags: [upgrade]
-      ansible.builtin.stat:
-        path: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/bin/upgradeEverything.sh"
-      register: script_stat
+    # -------------------------------------------------------------
+    # Stage 3: OS Package Upgrade (apt on Debian / dnf on Fedora)
+    # -------------------------------------------------------------
+    - name: Upgrade OS packages on Debian / Raspberry Pi OS
+      tags: [os]
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
 
-    - name: Fail if upgradeEverything.sh does not exist
-      tags: [upgrade]
-      ansible.builtin.fail:
-        msg: "Upgrade script not found at ~/bin/upgradeEverything.sh on {{ inventory_hostname }}"
-      when: not script_stat.stat.exists
+    - name: Upgrade OS packages on Fedora / RedHat
+      tags: [os]
+      when: ansible_facts['os_family'] == 'RedHat'
+      become: true
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      register: dnf_result
 
-    - name: Execute upgradeEverything.sh
-      tags: [upgrade]
-      ansible.builtin.shell:
-        cmd: "source ~/bin/upgradeEverything.sh"
-        executable: /bin/bash
-      register: upgrade_output
-      async: 3600
+    # -------------------------------------------------------------
+    # Stage 4: Docker Stacks (Minimal Downtime: Pull first, then up -d)
+    # -------------------------------------------------------------
+    - name: Pull updated Docker images while containers stay online
+      tags: [docker]
+      loop: "{{ docker_stacks | default([]) }}"
+      ansible.builtin.command:
+        cmd: "docker compose pull"
+        chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+      register: docker_pull_out
+      # Docker pulls images in background while services continue running
+      async: 900
       poll: 10
+      changed_when: false
 
-    - name: Display upgrade output
-      tags: [upgrade]
-      ansible.builtin.debug:
-        var: upgrade_output.stdout_lines
+    - name: Recreate and restart containers with new images (~2s downtime)
+      tags: [docker]
+      loop: "{{ docker_stacks | default([]) }}"
+      ansible.builtin.command:
+        cmd: "docker compose up -d --remove-orphans"
+        chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+      register: docker_up_out
+      changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout"
