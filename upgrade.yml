@@ -1,0 +1,30 @@
+---
+- name: Upgrade all home servers
+  hosts: servers
+  gather_facts: false
+  # Uncomment become: true if your upgrade script needs root privileges
+  # become: false
+
+  tasks:
+    - name: Check if upgrade script exists
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/bin/upgradeEverything.sh"
+      register: script_stat
+
+    - name: Fail if upgradeEverything.sh does not exist
+      ansible.builtin.fail:
+        msg: "Upgrade script not found at ~/bin/upgradeEverything.sh on {{ inventory_hostname }}"
+      when: not script_stat.stat.exists
+
+    - name: Execute upgradeEverything.sh
+      ansible.builtin.shell:
+        cmd: "source ~/bin/upgradeEverything.sh"
+        executable: /bin/bash
+      register: upgrade_output
+      # async allows long-running jobs (up to 1 hour) while polling every 10 seconds
+      async: 3600
+      poll: 10
+
+    - name: Display upgrade output
+      ansible.builtin.debug:
+        var: upgrade_output.stdout_lines
