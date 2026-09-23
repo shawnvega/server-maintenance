@@ -56,17 +56,42 @@
     # =============================================================
     # Stage STD-1: Standard Servers Load Check & Backups
     # =============================================================
-    - name: "[Standard] Wait for system load to drop below threshold"
+    - name: "[Standard] Check current system load"
       tags: [load_check]
       when: not (overlay_readonly | default(false))
       ansible.builtin.shell:
         cmd: "awk '{print $1}' /proc/loadavg"
-      register: load_out
-      until: (load_out.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
+      register: current_load
+      changed_when: false
+      check_mode: false
+
+    - name: "[Standard] Display current system load"
+      tags: [load_check]
+      when: not (overlay_readonly | default(false))
+      ansible.builtin.debug:
+        msg: "Current 1-min load: {{ current_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
+
+    - name: "[Standard] Wait for system load to drop below threshold"
+      tags: [load_check]
+      when:
+        - not (overlay_readonly | default(false))
+        - (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: wait_load
+      until: (wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
       retries: 20
       delay: 30
       changed_when: false
       check_mode: false
+
+    - name: "[Standard] Display updated system load"
+      tags: [load_check]
+      when:
+        - not (overlay_readonly | default(false))
+        - (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
+      ansible.builtin.debug:
+        msg: "System load dropped to: {{ wait_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
 
     - name: "[Standard] Run pre-upgrade backup via rpi-clone"
       tags: [backup]
@@ -91,6 +116,48 @@
     # =============================================================
     # Stage 3: OS Package Upgrades (Concurrent on all servers)
     # =============================================================
+    - name: "[All] Ensure journald configuration drop-in directory exists"
+      tags: [os]
+      become: true
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: "[All] Configure journald maximum disk usage cap (100M)"
+      tags: [os]
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/maxsize.conf
+        content: |
+          [Journal]
+          SystemMaxUse=100M
+        mode: "0644"
+      register: journal_conf
+
+    - name: "[All] Restart systemd-journald if configuration updated"
+      tags: [os]
+      become: true
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+      when: journal_conf.changed
+
+    - name: "[All] Vacuum systemd journal logs to 100M"
+      tags: [os]
+      become: true
+      ansible.builtin.command:
+        cmd: "journalctl --vacuum-size=100M"
+      changed_when: false
+
+    - name: "[Debian] Clean apt cache before upgrade to free disk space"
+      tags: [os]
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.apt:
+        clean: true
+      changed_when: false
+
     - name: "[All] Upgrade OS packages on Debian / Raspberry Pi OS"
       tags: [os]
       when: ansible_facts['os_family'] == 'Debian'
@@ -100,6 +167,7 @@
         upgrade: full
         autoremove: true
         autoclean: true
+        purge: true
       register: apt_result
 
     - name: "[All] Upgrade OS packages on Fedora / RedHat"
@@ -140,6 +208,18 @@
         chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
       register: docker_up_out
       changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout"
+
+    - name: "[Standard] Prune dangling and unused Docker images"
+      tags: [docker]
+      when:
+        - not (overlay_readonly | default(false))
+        - docker_stacks is defined
+        - (docker_stacks | length) > 0
+      ansible.builtin.command:
+        cmd: "docker image prune -a -f"
+      register: docker_prune_out
+      changed_when: "'Deleted Images:' in docker_prune_out.stdout"
+      failed_when: false
 
     # =============================================================
     # Stage RO-2: Read-Only Pi Restore & Final Reboot (192.168.4.11)

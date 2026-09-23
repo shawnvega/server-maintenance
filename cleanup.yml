@@ -1,0 +1,113 @@
+---
+- name: Disk space cleanup and maintenance across servers
+  hosts: standard_servers
+  gather_facts: true
+
+  tasks:
+    # -------------------------------------------------------------
+    # 1. Inspect initial disk space
+    # -------------------------------------------------------------
+    - name: Check initial root disk usage
+      ansible.builtin.command:
+        cmd: "df -h /"
+      register: disk_pre
+      changed_when: false
+
+    - name: Display initial disk space
+      ansible.builtin.debug:
+        msg: "{{ disk_pre.stdout_lines }}"
+
+    # -------------------------------------------------------------
+    # 2. Systemd Journal Size Limiting & Vacuuming
+    # -------------------------------------------------------------
+    - name: Ensure journald configuration drop-in directory exists
+      become: true
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure journald maximum disk usage cap (100M)
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/maxsize.conf
+        content: |
+          [Journal]
+          SystemMaxUse=100M
+        mode: "0644"
+      register: journal_conf
+
+    - name: Restart systemd-journald if configuration updated
+      become: true
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+      when: journal_conf.changed
+
+    - name: Vacuum systemd journal logs to 100M
+      become: true
+      ansible.builtin.command:
+        cmd: "journalctl --vacuum-size=100M"
+      changed_when: false
+
+    # -------------------------------------------------------------
+    # 3. APT / DNF Package Cache Cleanup
+    # -------------------------------------------------------------
+    - name: Clean APT package cache and partial downloads
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.apt:
+        clean: true
+        autoclean: true
+        autoremove: true
+        purge: true
+      changed_when: false
+
+    - name: Clean DNF cache on Fedora / RedHat
+      when: ansible_facts['os_family'] == 'RedHat'
+      become: true
+      ansible.builtin.command:
+        cmd: "dnf clean all"
+      changed_when: false
+
+    # -------------------------------------------------------------
+    # 4. Snap Package Cleanup (Remove disabled revisions)
+    # -------------------------------------------------------------
+    - name: Remove disabled snap package revisions
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          if command -v snap >/dev/null 2>&1; then
+            snap list --all | awk '/disabled/{print $1, $3}' | while read -r snapname revision; do
+              snap remove "$snapname" --revision="$revision"
+            done
+          fi
+      changed_when: false
+
+    # -------------------------------------------------------------
+    # 5. Docker Cleanup (Dangling & Unused Images / Containers)
+    # -------------------------------------------------------------
+    - name: Prune dangling and unused Docker images
+      when:
+        - docker_stacks is defined
+        - (docker_stacks | length) > 0
+      ansible.builtin.command:
+        cmd: "docker image prune -a -f"
+      register: docker_prune_out
+      changed_when: "'Deleted Images:' in docker_prune_out.stdout"
+      failed_when: false
+
+    # -------------------------------------------------------------
+    # 6. Verify reclaimed disk space
+    # -------------------------------------------------------------
+    - name: Check root disk usage after cleanup
+      ansible.builtin.command:
+        cmd: "df -h /"
+      register: disk_post
+      changed_when: false
+
+    - name: Display disk space after cleanup
+      ansible.builtin.debug:
+        msg: "{{ disk_post.stdout_lines }}"

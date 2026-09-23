@@ -85,12 +85,18 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh backup -K
 ```
 
-### 9. Target a Single Server
+### 9. Disk Space Maintenance & Cleanup
+```bash
+./run.sh cleanup -K                      # Clean disk space across all standard servers
+./run.sh cleanup --limit 192.168.4.18 -K # Clean disk space on a specific host
+```
+
+### 10. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 10. Run Arbitrary Ad-hoc Commands
+### 11. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -107,6 +113,7 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── inventory.ini          # Server definitions, backup devices, and docker stack lists
 ├── ping.yml               # Connectivity check playbook
 ├── backup.yml             # Dedicated backup playbook
+├── cleanup.yml            # Disk space cleanup & maintenance playbook
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
 ├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)

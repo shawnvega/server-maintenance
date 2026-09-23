@@ -53,16 +53,36 @@
     # -------------------------------------------------------------
     # Step 3: Wait for low load & Upgrade OS Packages
     # -------------------------------------------------------------
-    - name: Wait for system load to drop below threshold
+    - name: Check current system load
       tags: [load_check]
       ansible.builtin.shell:
         cmd: "awk '{print $1}' /proc/loadavg"
-      register: load_out
-      until: (load_out.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
+      register: current_load
+      changed_when: false
+      check_mode: false
+
+    - name: Display current system load
+      tags: [load_check]
+      ansible.builtin.debug:
+        msg: "Current 1-min load: {{ current_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
+
+    - name: Wait for system load to drop below threshold
+      tags: [load_check]
+      when: (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: wait_load
+      until: (wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
       retries: 20
       delay: 30
       changed_when: false
       check_mode: false
+
+    - name: Display updated system load
+      tags: [load_check]
+      when: (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
+      ansible.builtin.debug:
+        msg: "System load dropped to: {{ wait_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
 
     - name: Upgrade OS packages via apt (update, full-upgrade, autoremove)
       tags: [upgrade, os]

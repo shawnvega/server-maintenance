@@ -79,6 +79,15 @@ Uses `strategy: free` and `forks: 10` so all 5 servers run simultaneously:
 ./run.sh backup -K
 ```
 
+### Disk Space Maintenance & Cleanup
+```bash
+# Reclaim disk space across all standard servers (journal vacuum, apt clean, docker prune)
+./run.sh cleanup -K
+
+# Clean disk space on a single host
+./run.sh cleanup --limit 192.168.4.18 -K
+```
+
 ### Ad-hoc Shell Execution
 ```bash
 ./run.sh raw 'uptime'
@@ -97,6 +106,7 @@ Uses `strategy: free` and `forks: 10` so all 5 servers run simultaneously:
 * `ansible.cfg`: Core Ansible configuration (forks=10, inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
 * `upgrade_all.yml`: Master concurrent upgrade playbook for all 5 servers.
 * `upgrade.yml`: Native multi-stage upgrade playbook for standard servers.
+* `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `backup.yml`: Dedicated playbook for `rpi-clone` backups.
 * `ping.yml`: Quick connectivity verification playbook.

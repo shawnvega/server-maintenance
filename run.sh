@@ -26,12 +26,15 @@ usage() {
   echo "  upgrade              Run full upgrade pipeline on standard servers"
   echo "  upgrade-ro           Run upgrade on read-only Pi (RW -> reboot -> apt -> RO -> reboot)"
   echo "  upgrade-all          Run concurrent upgrades across ALL servers (standard + read-only Pi)"
+  echo "  cleanup              Reclaim disk space (journal vacuum, apt cache, docker prune)"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
   echo "Examples:"
   echo "  $0 ping"
   echo "  $0 backup -K                       # Run backup only"
+  echo "  $0 cleanup -K                      # Clean disk space across standard servers"
+  echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
   echo "  $0 upgrade -K                      # Standard servers: backup -> OS -> Docker"
   echo "  $0 upgrade-ro -K                   # Read-only Pi (192.168.4.11) upgrade cycle"
   echo "  $0 upgrade-all -K                  # All 5 servers simultaneously (strategy: free)"
@@ -65,6 +68,9 @@ case "${CMD}" in
     ;;
   upgrade-all)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade_all.yml" "$@"
+    ;;
+  cleanup)
+    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/cleanup.yml" "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK}" "$@"
