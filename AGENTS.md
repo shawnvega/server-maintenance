@@ -4,12 +4,12 @@
 This repository manages automation and configuration for self-hosted home servers using Ansible in a project-local Python virtual environment (`.venv`).
 
 ### Managed Hosts
-| Host | User | OS | Backup Method | Role |
+| Host | User | OS | Backup Method | Containers / Workloads |
 |---|---|---|---|---|
-| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Home server (glances, immich, jellyfin, syncthing) |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Home server (glances, etc.) |
-| `192.168.4.18` | `shawn` | Debian (Pi OS) | None | Home server (glances, etc.) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Home server (glances0, etc.) |
+| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich`, `jellyfin`, `syncthing` |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich-ml` |
+| `192.168.4.18` | `shawn` | Debian (Pi OS) | None | `glances` |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | `glances0`, `frigate0` |
 
 ---
 
