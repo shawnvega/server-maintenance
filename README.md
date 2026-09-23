@@ -16,15 +16,22 @@ Ansible automation for managing home servers natively (load monitoring, rpi-clon
 
 ## Upgrade Pipelines
 
-### Standard Servers (`upgrade.yml`)
-Executes natively across standard servers in 4 clean stages:
+### 1. Concurrent Master Upgrade (`upgrade_all.yml`)
+Upgrades **all 5 servers simultaneously** using Ansible's `strategy: free`:
+* `192.168.4.11` handles its overlay disable & reboot cycle.
+* Concurrently, `.4`, `.5`, `.18`, and `.19` run their backups, OS updates, and Docker pulls without waiting for `.11`'s reboot.
+* OS upgrades run across all machines in parallel.
+* Prompt for sudo password once (`-K`).
+
+### 2. Standard Servers Only (`upgrade.yml`)
+Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without touching `.11`:
 1. **Load Check (`tags: [load_check]`)**: Waits for CPU load average to drop below threshold (`2.0` on `.18`, `4.0` on others).
-2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`. If backup fails, pipeline halts to protect containers.
+2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`.
 3. **OS Packages (`tags: [os]`)**: Uses `apt full-upgrade` on Debian hosts and `dnf upgrade` on Fedora.
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime rolling update (`docker compose pull` while services stay online, then `docker compose up -d`).
 
-### Read-Only Pi Maintenance (`readonly_upgrade.yml`)
-Automates the full maintenance cycle for `192.168.4.11`:
+### 3. Read-Only Pi Maintenance Only (`readonly_upgrade.yml`)
+Automates the full maintenance cycle for `192.168.4.11` in isolation:
 1. Checks current overlay state (`raspi-config nonint get_overlay_now`).
 2. Switches overlay to Read/Write (`raspi-config nonint do_overlayfs 1`).
 3. Reboots into Read/Write mode and waits for SSH to return.
@@ -43,42 +50,47 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh ping
 ```
 
-### 2. Standard Servers Upgrade (Backup + OS + Docker)
+### 2. Upgrade ALL 5 Servers Concurrently (Recommended)
+```bash
+./run.sh upgrade-all -K
+```
+
+### 3. Standard Servers Upgrade Only
 ```bash
 ./run.sh upgrade -K
 ```
 
-### 3. Read-Only Pi Upgrade (RW -> Reboot -> Upgrade -> RO -> Reboot)
+### 4. Read-Only Pi Upgrade Only
 ```bash
 ./run.sh upgrade-ro -K
 ```
 
-### 4. Update Docker Containers Only (Zero Downtime Pull)
+### 5. Dry Run (Simulate Changes Without Installing)
+```bash
+./run.sh upgrade-all --check -K
+```
+
+### 6. Update Docker Containers Only (Zero Downtime Pull)
 ```bash
 ./run.sh upgrade --tags docker
 ```
 
-### 5. OS Package Updates Only
+### 7. OS Package Updates Only
 ```bash
 ./run.sh upgrade --tags os -K
 ```
 
-### 6. Backup Only
+### 8. Backup Only
 ```bash
 ./run.sh backup -K
 ```
 
-### 7. Upgrade Without Backup
-```bash
-./run.sh upgrade --skip-tags backup -K
-```
-
-### 8. Target a Single Server
+### 9. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 9. Run Arbitrary Ad-hoc Commands
+### 10. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -91,12 +103,13 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ```
 .
 ├── .gitignore
-├── ansible.cfg            # Ansible defaults (inventory, yaml output, SSH pipelining)
+├── ansible.cfg            # Ansible defaults (forks=10, inventory, yaml output, SSH pipelining)
 ├── inventory.ini          # Server definitions, backup devices, and docker stack lists
 ├── ping.yml               # Connectivity check playbook
 ├── backup.yml             # Dedicated backup playbook
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
+├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)
 ├── requirements.txt       # Python dependencies
 ├── run.sh                 # Convenience CLI wrapper
 └── .venv/                 # Local Python virtual environment (gitignored)

@@ -1,0 +1,173 @@
+---
+- name: Concurrent upgrade across all home servers (standard + read-only Pi)
+  hosts: servers
+  strategy: free
+  gather_facts: true
+
+  tasks:
+    # =============================================================
+    # Stage RO-1: Read-Only Pi Overlay Preparation (192.168.4.11)
+    # =============================================================
+    - name: "[RO-Pi] Check initial overlay filesystem status"
+      tags: [readonly, check]
+      when: overlay_readonly | default(false)
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_now"
+      register: initial_overlay_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: "[RO-Pi] Disable overlay filesystem (switch config to Read/Write)"
+      tags: [readonly, rw]
+      when:
+        - overlay_readonly | default(false)
+        - initial_overlay_status is defined
+        - initial_overlay_status.rc | default(1) == 0
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint do_overlayfs 1"
+
+    - name: "[RO-Pi] Reboot into Read/Write mode and wait for host to return"
+      tags: [readonly, rw, reboot]
+      when:
+        - overlay_readonly | default(false)
+        - initial_overlay_status is defined
+        - initial_overlay_status.rc | default(1) == 0
+      become: true
+      ansible.builtin.reboot:
+        msg: "Rebooting into Read/Write mode for maintenance"
+        pre_reboot_delay: 2
+        post_reboot_delay: 10
+        reboot_timeout: 300
+
+    - name: "[RO-Pi] Verify filesystem is running in Read/Write mode"
+      tags: [readonly, rw]
+      when: overlay_readonly | default(false)
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_now"
+      register: rw_check
+      failed_when: rw_check.rc != 1
+      changed_when: false
+      check_mode: false
+
+    # =============================================================
+    # Stage STD-1: Standard Servers Load Check & Backups
+    # =============================================================
+    - name: "[Standard] Wait for system load to drop below threshold"
+      tags: [load_check]
+      when: not (overlay_readonly | default(false))
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: load_out
+      until: (load_out.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
+      retries: 20
+      delay: 30
+      changed_when: false
+      check_mode: false
+
+    - name: "[Standard] Run pre-upgrade backup via rpi-clone"
+      tags: [backup]
+      when:
+        - not (overlay_readonly | default(false))
+        - backup_method | default('none') == 'rpi-clone'
+      become: true
+      ansible.builtin.command:
+        cmd: "rpi-clone -u -v {{ backup_device }}"
+      register: clone_result
+      async: 1800
+      poll: 15
+
+    - name: "[Standard] Display backup summary"
+      tags: [backup]
+      when:
+        - not (overlay_readonly | default(false))
+        - backup_method | default('none') == 'rpi-clone'
+      ansible.builtin.debug:
+        var: clone_result.stdout_lines
+
+    # =============================================================
+    # Stage 3: OS Package Upgrades (Concurrent on all servers)
+    # =============================================================
+    - name: "[All] Upgrade OS packages on Debian / Raspberry Pi OS"
+      tags: [os]
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
+
+    - name: "[All] Upgrade OS packages on Fedora / RedHat"
+      tags: [os]
+      when: ansible_facts['os_family'] == 'RedHat'
+      become: true
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      register: dnf_result
+
+    # =============================================================
+    # Stage 4: Docker Stacks (Standard Servers, Minimal Downtime)
+    # =============================================================
+    - name: "[Standard] Pull updated Docker images while containers stay online"
+      tags: [docker]
+      when:
+        - not (overlay_readonly | default(false))
+        - docker_stacks is defined
+      loop: "{{ docker_stacks | default([]) }}"
+      ansible.builtin.command:
+        cmd: "docker compose pull"
+        chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+      register: docker_pull_out
+      async: 900
+      poll: 10
+      changed_when: false
+
+    - name: "[Standard] Recreate and restart containers with new images (~2s downtime)"
+      tags: [docker]
+      when:
+        - not (overlay_readonly | default(false))
+        - docker_stacks is defined
+      loop: "{{ docker_stacks | default([]) }}"
+      ansible.builtin.command:
+        cmd: "docker compose up -d --remove-orphans"
+        chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+      register: docker_up_out
+      changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout"
+
+    # =============================================================
+    # Stage RO-2: Read-Only Pi Restore & Final Reboot (192.168.4.11)
+    # =============================================================
+    - name: "[RO-Pi] Re-enable overlay filesystem (switch config to Read-Only)"
+      tags: [readonly, ro]
+      when: overlay_readonly | default(false)
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint do_overlayfs 0"
+
+    - name: "[RO-Pi] Reboot back into Read-Only mode and wait for host to return"
+      tags: [readonly, ro, reboot]
+      when: overlay_readonly | default(false)
+      become: true
+      ansible.builtin.reboot:
+        msg: "Rebooting back into Read-Only mode"
+        pre_reboot_delay: 2
+        post_reboot_delay: 10
+        reboot_timeout: 300
+
+    - name: "[RO-Pi] Verify filesystem is safely back in Read-Only mode"
+      tags: [readonly, ro]
+      when: overlay_readonly | default(false)
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_now"
+      register: ro_check
+      failed_when: ro_check.rc != 0
+      changed_when: false
+      check_mode: false

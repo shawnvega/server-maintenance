@@ -23,13 +23,20 @@ This repository manages automation and configuration for self-hosted home server
 
 ## Upgrade Pipeline Stages
 
-### Standard Hosts (`upgrade.yml` targeting `standard_servers`)
+### Concurrent All-in-One (`upgrade_all.yml` targeting `servers`)
+Uses `strategy: free` and `forks: 10` so all 5 servers run simultaneously:
+1. `192.168.4.11` immediately begins its overlay disable & reboot cycle.
+2. Simultaneously, standard servers run their load checks, `rpi-clone` backups, and container pulls.
+3. OS package upgrades execute across all nodes concurrently.
+4. `192.168.4.11` re-enables its overlay and reboots back into Read-Only mode while standard nodes restart Docker stacks.
+
+### Standard Hosts Only (`upgrade.yml` targeting `standard_servers`)
 1. **Load Check (`tags: [load_check]`)**: Waits for loadavg to drop below `load_threshold`.
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
 3. **OS Upgrades (`tags: [os]`)**: Uses `apt` for Debian/Pi OS and `dnf` for Fedora.
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then `docker compose up -d`).
 
-### Read-Only Pi (`readonly_upgrade.yml` targeting `readonly_servers`)
+### Read-Only Pi Maintenance Only (`readonly_upgrade.yml` targeting `readonly_servers`)
 1. **Detect Overlay**: `raspi-config nonint get_overlay_now`.
 2. **Switch to RW**: `raspi-config nonint do_overlayfs 1`.
 3. **Reboot**: Waits for host to reboot in RW mode.
@@ -48,10 +55,13 @@ This repository manages automation and configuration for self-hosted home server
 
 ### Full Upgrade Pipelines
 ```bash
-# Standard servers (192.168.4.4, 4.5, 4.18, 4.19)
+# All 5 servers simultaneously (strategy: free)
+./run.sh upgrade-all -K
+
+# Standard servers only (192.168.4.4, 4.5, 4.18, 4.19)
 ./run.sh upgrade -K
 
-# Read-only server maintenance cycle (192.168.4.11)
+# Read-only server maintenance cycle only (192.168.4.11)
 ./run.sh upgrade-ro -K
 ```
 
@@ -84,7 +94,8 @@ This repository manages automation and configuration for self-hosted home server
 
 ## File Structure & Conventions
 * `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`, `load_threshold`, `docker_stacks`), and groups (`standard_servers`, `readonly_servers`).
-* `ansible.cfg`: Core Ansible configuration (inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
+* `ansible.cfg`: Core Ansible configuration (forks=10, inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
+* `upgrade_all.yml`: Master concurrent upgrade playbook for all 5 servers.
 * `upgrade.yml`: Native multi-stage upgrade playbook for standard servers.
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `backup.yml`: Dedicated playbook for `rpi-clone` backups.
