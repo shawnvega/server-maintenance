@@ -15,6 +15,7 @@
       register: initial_overlay_status
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Display current mode
       tags: [overlay, check]
@@ -57,10 +58,11 @@
       ansible.builtin.shell:
         cmd: "awk '{print $1}' /proc/loadavg"
       register: load_out
-      until: (load_out.stdout | float) <= (load_threshold | default(4.0) | float)
+      until: (load_out.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
       retries: 20
       delay: 30
       changed_when: false
+      check_mode: false
 
     - name: Upgrade OS packages via apt (update, full-upgrade, autoremove)
       tags: [upgrade, os]
