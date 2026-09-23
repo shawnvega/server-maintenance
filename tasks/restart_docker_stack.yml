@@ -5,8 +5,8 @@
     cmd: "awk '{print $1}' /proc/loadavg"
   register: docker_stack_load
   until: (docker_stack_load.stdout | trim | float) <= (load_threshold | default(4.0) | float)
-  retries: 20
-  delay: 15
+  retries: 30
+  delay: 30
   changed_when: false
   failed_when: docker_stack_load.rc != 0
   check_mode: false

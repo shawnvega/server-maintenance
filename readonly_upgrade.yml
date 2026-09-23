@@ -73,7 +73,7 @@
         cmd: "awk '{print $1}' /proc/loadavg"
       register: wait_load
       until: (wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
-      retries: 20
+      retries: 30
       delay: 30
       changed_when: false
       check_mode: false
