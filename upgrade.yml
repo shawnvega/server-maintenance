@@ -1,6 +1,6 @@
 ---
-- name: Upgrade all home servers natively
-  hosts: servers
+- name: Upgrade standard home servers natively
+  hosts: standard_servers
   gather_facts: true
 
   tasks:

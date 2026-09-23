@@ -1,0 +1,106 @@
+---
+- name: Upgrade Read-Only Raspberry Pi (OverlayFS Toggle & Reboot Cycle)
+  hosts: readonly_servers
+  gather_facts: true
+  become: true
+
+  tasks:
+    # -------------------------------------------------------------
+    # Step 1: Detect Overlay State
+    # -------------------------------------------------------------
+    - name: Check current overlay filesystem status
+      tags: [overlay, check]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_now"
+      register: initial_overlay_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display current mode
+      tags: [overlay, check]
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Currently in Read-Only mode (overlay active).' if initial_overlay_status.rc == 0
+             else 'Currently in Read/Write mode (overlay disabled).' }}
+
+    # -------------------------------------------------------------
+    # Step 2: Switch to Read/Write and Reboot (if in RO mode)
+    # -------------------------------------------------------------
+    - name: Disable overlay filesystem (switch config to Read/Write)
+      tags: [overlay, rw]
+      when: initial_overlay_status.rc == 0
+      ansible.builtin.command:
+        cmd: "raspi-config nonint do_overlayfs 1"
+
+    - name: Reboot into Read/Write mode and wait for host
+      tags: [overlay, rw, reboot]
+      when: initial_overlay_status.rc == 0
+      ansible.builtin.reboot:
+        msg: "Rebooting into Read/Write mode for maintenance"
+        pre_reboot_delay: 2
+        post_reboot_delay: 10
+        reboot_timeout: 300
+
+    - name: Verify filesystem is running in Read/Write mode
+      tags: [overlay, rw]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_now"
+      register: rw_check
+      failed_when: rw_check.rc != 1
+      changed_when: false
+
+    # -------------------------------------------------------------
+    # Step 3: Wait for low load & Upgrade OS Packages
+    # -------------------------------------------------------------
+    - name: Wait for system load to drop below threshold
+      tags: [load_check]
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: load_out
+      until: (load_out.stdout | float) <= (load_threshold | default(4.0) | float)
+      retries: 20
+      delay: 30
+      changed_when: false
+
+    - name: Upgrade OS packages via apt (update, full-upgrade, autoremove)
+      tags: [upgrade, os]
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
+
+    - name: Display apt upgrade summary
+      tags: [upgrade, os]
+      ansible.builtin.debug:
+        msg: "APT packages updated successfully."
+
+    # -------------------------------------------------------------
+    # Step 4: Re-enable Overlay and Reboot back to Read-Only
+    # -------------------------------------------------------------
+    - name: Re-enable overlay filesystem (switch config to Read-Only)
+      tags: [overlay, ro]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint do_overlayfs 0"
+
+    - name: Reboot into Read-Only mode and wait for host
+      tags: [overlay, ro, reboot]
+      ansible.builtin.reboot:
+        msg: "Rebooting back into Read-Only mode"
+        pre_reboot_delay: 2
+        post_reboot_delay: 10
+        reboot_timeout: 300
+
+    - name: Verify filesystem is safely back in Read-Only mode
+      tags: [overlay, ro]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_now"
+      register: ro_check
+      failed_when: ro_check.rc != 0
+      changed_when: false
+
+    - name: Success confirmation
+      tags: [overlay, ro]
+      ansible.builtin.debug:
+        msg: "Host {{ inventory_hostname }} has been upgraded and is safely operating in Read-Only mode!"

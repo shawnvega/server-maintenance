@@ -22,14 +22,16 @@ usage() {
   echo "Commands:"
   echo "  ping                 Test SSH connectivity to all servers"
   echo "  backup               Run backup (rpi-clone) on configured servers"
-  echo "  upgrade              Run full upgrade pipeline (backup, OS, and Docker)"
+  echo "  upgrade              Run full upgrade pipeline on standard servers"
+  echo "  upgrade-ro           Run upgrade on read-only Pi (RW -> reboot -> apt -> RO -> reboot)"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
   echo "Examples:"
   echo "  $0 ping"
   echo "  $0 backup -K                       # Run backup only"
-  echo "  $0 upgrade -K                      # Full pipeline: backup -> OS -> Docker"
+  echo "  $0 upgrade -K                      # Standard servers: backup -> OS -> Docker"
+  echo "  $0 upgrade-ro -K                   # Read-only Pi (192.168.4.11) upgrade cycle"
   echo "  $0 upgrade --tags os -K            # OS package upgrades only"
   echo "  $0 upgrade --tags docker           # Docker containers only (minimal downtime)"
   echo "  $0 upgrade --skip-tags backup -K   # Skip backup and run OS + Docker upgrades"
@@ -54,6 +56,9 @@ case "${CMD}" in
     ;;
   upgrade)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" "$@"
+    ;;
+  upgrade-ro)
+    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/readonly_upgrade.yml" "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK}" "$@"
