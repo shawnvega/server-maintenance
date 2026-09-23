@@ -28,7 +28,7 @@ Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without tou
 1. **Load Check (`tags: [load_check]`)**: Waits for CPU load average to drop below threshold (`2.0` on `.18`, `4.0` on others).
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`.
 3. **OS Packages (`tags: [os]`)**: Uses `apt full-upgrade` on Debian hosts and `dnf upgrade` on Fedora.
-4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime rolling update (`docker compose pull` while services stay online, then `docker compose up -d`).
+4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime rolling update (`docker compose pull` while services stay online, then rolling `docker compose up -d` with load checks between each stack).
 
 ### 3. Read-Only Pi Maintenance Only (`readonly_upgrade.yml`)
 Automates the full maintenance cycle for `192.168.4.11` in isolation:
@@ -117,6 +117,8 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
 ├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)
+├── tasks/
+│   └── restart_docker_stack.yml # Modular stack restart with load check
 ├── requirements.txt       # Python dependencies
 ├── run.sh                 # Convenience CLI wrapper
 └── .venv/                 # Local Python virtual environment (gitignored)

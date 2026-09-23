@@ -34,7 +34,7 @@ Uses `strategy: free` and `forks: 10` so all 5 servers run simultaneously:
 1. **Load Check (`tags: [load_check]`)**: Waits for loadavg to drop below `load_threshold`.
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
 3. **OS Upgrades (`tags: [os]`)**: Uses `apt` for Debian/Pi OS and `dnf` for Fedora.
-4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then `docker compose up -d`).
+4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then rolling `docker compose up -d` with system load checks between each stack restart).
 
 ### Read-Only Pi Maintenance Only (`readonly_upgrade.yml` targeting `readonly_servers`)
 1. **Detect Overlay**: `raspi-config nonint get_overlay_now`.
@@ -110,6 +110,7 @@ Uses `strategy: free` and `forks: 10` so all 5 servers run simultaneously:
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `backup.yml`: Dedicated playbook for `rpi-clone` backups.
 * `ping.yml`: Quick connectivity verification playbook.
+* `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
 * `run.sh`: Main entrypoint for humans and automation.
 * `requirements.txt`: Python package requirements.
 * `AGENTS.md` / `CLAUDE.md`: Repository instructions and conventions for AI assistants.

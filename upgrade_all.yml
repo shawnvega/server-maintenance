@@ -197,17 +197,15 @@
       poll: 10
       changed_when: false
 
-    - name: "[Standard] Recreate and restart containers with new images (~2s downtime)"
+    - name: "[Standard] Restart Docker stacks with load check between each stack"
       tags: [docker]
       when:
         - not (overlay_readonly | default(false))
         - docker_stacks is defined
+      ansible.builtin.include_tasks: tasks/restart_docker_stack.yml
       loop: "{{ docker_stacks | default([]) }}"
-      ansible.builtin.command:
-        cmd: "docker compose up -d --remove-orphans"
-        chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
-      register: docker_up_out
-      changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout"
+      loop_control:
+        loop_var: stack_item
 
     - name: "[Standard] Prune dangling and unused Docker images"
       tags: [docker]

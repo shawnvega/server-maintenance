@@ -1,0 +1,26 @@
+---
+- name: "Wait for system load to drop below threshold before restarting {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.shell:
+    cmd: "awk '{print $1}' /proc/loadavg"
+  register: docker_stack_load
+  until: (docker_stack_load.stdout | trim | float) <= (load_threshold | default(4.0) | float)
+  retries: 20
+  delay: 15
+  changed_when: false
+  failed_when: docker_stack_load.rc != 0
+  check_mode: false
+
+- name: "Display system load before restarting {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.debug:
+    msg: "Current 1-min load is {{ docker_stack_load.stdout | trim }} (threshold: {{ load_threshold | default(4.0) }}). Proceeding with {{ stack_item }}."
+
+- name: "Recreate and restart {{ stack_item }} (~2s downtime)"
+  tags: [docker]
+  ansible.builtin.command:
+    cmd: "docker compose up -d --remove-orphans"
+    chdir: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}"
+  register: docker_up_out
+  changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout"
+  failed_when: docker_up_out.rc != 0
