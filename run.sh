@@ -4,10 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"
 
-# Ensure venv exists
-if [ ! -d "${VENV_DIR}" ]; then
-  echo "Virtual environment not found at ${VENV_DIR}."
+# Ensure venv exists and is functional
+if [ ! -d "${VENV_DIR}" ] || ! "${VENV_DIR}/bin/python3" --version >/dev/null 2>&1; then
+  echo "Virtual environment missing or invalid at ${VENV_DIR}."
   echo "Creating virtual environment and installing dependencies..."
+  rm -rf "${VENV_DIR}"
   python3 -m venv "${VENV_DIR}"
   "${VENV_DIR}/bin/pip" install -r "${SCRIPT_DIR}/requirements.txt"
 fi
