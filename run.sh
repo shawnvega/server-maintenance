@@ -82,7 +82,7 @@ case "${CMD}" in
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/cleanup.yml" "$@"
     ;;
   restart-vlc)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 "$@"
+    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 -e "force_vlc_restart=true" "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK}" "$@"

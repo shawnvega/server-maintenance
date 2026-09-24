@@ -124,13 +124,28 @@
         update_cache: true
       register: dnf_result
 
-    - name: Stop VLC stream before updating snap packages
+    - name: Check if VLC snap package has an update available
       tags: [os, snap]
       when:
         - vlc_stream_url is defined
         - (vlc_stream_url | length) > 0
         - snap_packages is defined
         - "'vlc' in snap_packages"
+      ansible.builtin.shell:
+        cmd: "snap refresh --list 2>/dev/null | awk '$1 == \"vlc\" {found=1} END {exit !found}'"
+      register: vlc_snap_update_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Stop VLC stream before updating snap packages (when VLC update available)
+      tags: [os, snap]
+      when:
+        - vlc_stream_url is defined
+        - (vlc_stream_url | length) > 0
+        - snap_packages is defined
+        - "'vlc' in snap_packages"
+        - vlc_snap_update_check.rc == 0
       ansible.builtin.shell:
         cmd: |
           pkill -x vlc 2>/dev/null || true

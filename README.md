@@ -47,7 +47,7 @@ Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without tou
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`.
 3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt full-upgrade` on Debian hosts, `dnf upgrade` on Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime rolling update (`docker compose pull` while services stay online, then rolling `docker compose up -d` with load checks between each stack).
-5. **VLC Video Streams (`tags: [vlc, snap, os]`)**: Stops prior instance, starts background fullscreen stream (`DISPLAY=:0`), and verifies process execution.
+5. **VLC Video Streams (`tags: [vlc, snap, os]`)**: Checks if VLC is already running (`pgrep -x vlc`); if not running (or if force-restarted via `./run.sh restart-vlc`), starts the background fullscreen stream (`DISPLAY=:0`) and verifies process execution.
 
 ### 3. Read-Only Pi Maintenance Only (`readonly_upgrade.yml`)
 Automates the full maintenance cycle for `192.168.4.11` in isolation:

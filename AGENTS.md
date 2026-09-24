@@ -42,7 +42,7 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
 3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt` for Debian/Pi OS, `dnf` for Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then rolling `docker compose up -d` with system load checks between each stack restart).
-5. **VLC Video Stream (`tags: [vlc, snap, os]`)**: Stops previous VLC instance, launches fullscreen background RTSP stream on `DISPLAY=:0`, and verifies process execution (automatically triggered on full, `os`, `snap`, or `vlc` runs).
+5. **VLC Video Stream (`tags: [vlc, snap, os]`)**: Checks if VLC is already running (`pgrep -x vlc`); if not running (or if `force_vlc_restart=true` via `./run.sh restart-vlc`), launches the fullscreen background RTSP stream on `DISPLAY=:0` and verifies process execution.
 
 ### Read-Only Pi Maintenance Only (`readonly_upgrade.yml` targeting `readonly_servers`)
 1. **Detect Protections**: Checks running and configured states of OverlayFS (`raspi-config nonint get_overlay_now`/`get_overlay_conf`) and Boot Write Protection (`get_bootro_now`/`get_bootro_conf`).

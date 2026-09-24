@@ -1,6 +1,18 @@
 ---
-- name: Stop running VLC stream and wait for process termination
+- name: Check if VLC stream process is already running
   tags: [vlc, snap, os]
+  ansible.builtin.shell:
+    cmd: "pgrep -x vlc"
+  register: vlc_running_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop running VLC stream and wait for process termination (when force restart requested)
+  tags: [vlc, snap, os]
+  when:
+    - force_vlc_restart | default(false) | bool
+    - vlc_running_check.rc == 0
   ansible.builtin.shell:
     cmd: |
       pkill -x vlc 2>/dev/null || true
@@ -15,6 +27,7 @@
 
 - name: Wait for any active snap auto-refresh to complete before starting VLC
   tags: [vlc, snap, os]
+  when: (vlc_running_check.rc != 0) or (force_vlc_restart | default(false) | bool)
   ansible.builtin.shell:
     cmd: |
       if command -v snap >/dev/null 2>&1; then
@@ -27,6 +40,7 @@
 
 - name: Start VLC fullscreen stream in background
   tags: [vlc, snap, os]
+  when: (vlc_running_check.rc != 0) or (force_vlc_restart | default(false) | bool)
   ansible.builtin.shell:
     cmd: >-
       nohup vlc {{ vlc_stream_options | default('--fullscreen') }} "{{ vlc_stream_url }}"
@@ -48,7 +62,8 @@
   changed_when: false
   failed_when: vlc_pgrep.rc != 0
 
-- name: Display restarted VLC stream PID
+- name: Display VLC stream status and PID
   tags: [vlc, snap, os]
   ansible.builtin.debug:
-    msg: "VLC stream restarted successfully with PID(s): {{ vlc_pgrep.stdout_lines | join(', ') }}"
+    msg: >-
+      {{ 'VLC stream restarted successfully with PID(s): ' if ((vlc_running_check.rc != 0) or (force_vlc_restart | default(false) | bool)) else 'VLC stream already running with PID(s): ' }}{{ vlc_pgrep.stdout_lines | join(', ') }}
