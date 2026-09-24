@@ -28,6 +28,7 @@ usage() {
   echo "  upgrade-pikvm        Run upgrade on PiKVM (192.168.4.66 pikvm-update & RO restore)"
   echo "  upgrade-all          Run concurrent upgrades across ALL servers (standard + read-only Pi + PiKVM)"
   echo "  cleanup              Reclaim disk space (journal vacuum, apt cache, docker prune)"
+  echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
@@ -36,11 +37,14 @@ usage() {
   echo "  $0 backup -K                       # Run backup only"
   echo "  $0 cleanup -K                      # Clean disk space across standard servers"
   echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
-  echo "  $0 upgrade -K                      # Standard servers: backup -> OS -> Docker"
+  echo "  $0 restart-vlc                     # Restart VLC stream on 192.168.4.18"
+  echo "  $0 upgrade -K                      # Standard servers: backup -> OS/Snap -> Docker -> VLC"
   echo "  $0 upgrade-ro -K                   # Read-only Pi (192.168.4.11) upgrade cycle"
   echo "  $0 upgrade-pikvm                   # PiKVM (192.168.4.66) upgrade cycle"
   echo "  $0 upgrade-all -K                  # All servers simultaneously (strategy: free)"
   echo "  $0 upgrade --tags os -K            # OS package upgrades only"
+  echo "  $0 upgrade --tags snap -K          # Snap package upgrades only"
+  echo "  $0 upgrade --tags vlc              # Restart VLC stream only"
   echo "  $0 upgrade --tags docker           # Docker containers only (minimal downtime)"
   echo "  $0 upgrade --skip-tags backup -K   # Skip backup and run OS + Docker upgrades"
   echo "  $0 upgrade --limit 192.168.4.4 -K  # Run on a single server only"
@@ -76,6 +80,9 @@ case "${CMD}" in
     ;;
   cleanup)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/cleanup.yml" "$@"
+    ;;
+  restart-vlc)
+    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK}" "$@"

@@ -1,0 +1,35 @@
+---
+- name: Stop running VLC stream and allow clean exit
+  tags: [vlc, snap, os]
+  ansible.builtin.shell:
+    cmd: "pkill -f vlc || true; sleep 2"
+  changed_when: false
+  failed_when: false
+
+- name: Start VLC fullscreen stream in background
+  tags: [vlc, snap, os]
+  ansible.builtin.shell:
+    cmd: >-
+      nohup vlc {{ vlc_stream_options | default('--fullscreen') }} "{{ vlc_stream_url }}"
+      </dev/null >/dev/null 2>&1 &
+  environment:
+    DISPLAY: "{{ vlc_display | default(':0') }}"
+    XAUTHORITY: "{{ ansible_facts['user_dir'] }}/.Xauthority"
+  changed_when: true
+  failed_when: false
+
+- name: Verify VLC stream process is running
+  tags: [vlc, snap, os]
+  ansible.builtin.shell:
+    cmd: "pgrep -f 'vlc.*{{ vlc_stream_url | regex_escape }}' || pgrep -f 'vlc'"
+  register: vlc_pgrep
+  until: vlc_pgrep.rc == 0
+  retries: 5
+  delay: 1
+  changed_when: false
+  failed_when: vlc_pgrep.rc != 0
+
+- name: Display restarted VLC stream PID
+  tags: [vlc, snap, os]
+  ansible.builtin.debug:
+    msg: "VLC stream restarted successfully with PID(s): {{ vlc_pgrep.stdout_lines | join(', ') }}"

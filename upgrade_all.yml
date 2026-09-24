@@ -255,6 +255,36 @@
         update_cache: true
       register: dnf_result
 
+    - name: "[Standard] Stop VLC stream before updating snap packages"
+      tags: [os, snap]
+      when:
+        - inventory_hostname in groups.get('standard_servers', [])
+        - vlc_stream_url is defined
+        - (vlc_stream_url | length) > 0
+        - snap_packages is defined
+        - "'vlc' in snap_packages"
+      ansible.builtin.shell:
+        cmd: "pkill -f vlc || true"
+      changed_when: false
+      failed_when: false
+
+    - name: "[Standard] Upgrade Snap packages"
+      tags: [os, snap]
+      when:
+        - inventory_hostname in groups.get('standard_servers', [])
+        - snap_packages is defined
+        - (snap_packages | length) > 0
+      become: true
+      loop: "{{ snap_packages | default([]) }}"
+      ansible.builtin.command:
+        cmd: "snap refresh {{ item }}"
+      register: snap_refresh_out
+      changed_when: "'refreshed' in snap_refresh_out.stdout"
+      failed_when:
+        - snap_refresh_out.rc != 0
+        - "'has no updates available' not in snap_refresh_out.stderr"
+        - "'has no updates available' not in snap_refresh_out.stdout"
+
     # =============================================================
     # Stage 4: Docker Stacks (Standard Servers, Minimal Downtime)
     # =============================================================
@@ -293,6 +323,17 @@
       register: docker_prune_out
       changed_when: "'Deleted Images:' in docker_prune_out.stdout"
       failed_when: false
+
+    # =============================================================
+    # Stage 5: VLC Video Streams (Standard Servers)
+    # =============================================================
+    - name: "[Standard] Restart persistent VLC video streams"
+      tags: [vlc, snap, os]
+      when:
+        - inventory_hostname in groups.get('standard_servers', [])
+        - vlc_stream_url is defined
+        - (vlc_stream_url | length) > 0
+      ansible.builtin.include_tasks: tasks/restart_vlc_stream.yml
 
     # =============================================================
     # Stage RO-2: Read-Only Pi Restore & Final Reboot (192.168.4.11)

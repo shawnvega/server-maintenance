@@ -8,7 +8,7 @@ This repository manages automation and configuration for self-hosted home server
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml` |
-| `192.168.4.18` | `shawn` | Debian (Pi OS) | None | Read/Write | `glances` |
+| `192.168.4.18` | `shawn` | Debian / Ubuntu | None | Read/Write | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0` |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
@@ -33,14 +33,16 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 1. `192.168.4.11` checks overlay and boot write protection, disables overlay, reboots into RW mode, and remounts `/boot/firmware` as RW.
 2. `192.168.4.66` runs `pikvm-update --no-reboot`, and if updates are applied, reboots cleanly into verified Read-Only mode.
 3. Simultaneously, standard servers run their load checks, `rpi-clone` backups, and container pulls.
-4. OS package upgrades execute across standard nodes concurrently (with pre-upgrade dpkg healing on Debian).
-5. `192.168.4.11` restores boot write protection, re-enables overlay, and reboots back into verified Read-Only mode while standard nodes restart Docker stacks.
+4. OS and package upgrades execute across standard nodes concurrently (APT/DNF and Snap packages like `vlc` on `.18`, with pre-upgrade dpkg healing on Debian).
+5. Standard nodes restart Docker stacks, then restart persistent VLC video streams (`192.168.4.18`).
+6. `192.168.4.11` restores boot write protection, re-enables overlay, and reboots back into verified Read-Only mode.
 
 ### Standard Hosts Only (`upgrade.yml` targeting `standard_servers`)
 1. **Load Check (`tags: [load_check]`)**: Waits for loadavg to drop below `load_threshold`.
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
-3. **OS Upgrades (`tags: [os]`)**: Uses `apt` for Debian/Pi OS and `dnf` for Fedora.
+3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt` for Debian/Pi OS, `dnf` for Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then rolling `docker compose up -d` with system load checks between each stack restart).
+5. **VLC Video Stream (`tags: [vlc, snap, os]`)**: Stops previous VLC instance, launches fullscreen background RTSP stream on `DISPLAY=:0`, and verifies process execution (automatically triggered on full, `os`, `snap`, or `vlc` runs).
 
 ### Read-Only Pi Maintenance Only (`readonly_upgrade.yml` targeting `readonly_servers`)
 1. **Detect Protections**: Checks running and configured states of OverlayFS (`raspi-config nonint get_overlay_now`/`get_overlay_conf`) and Boot Write Protection (`get_bootro_now`/`get_bootro_conf`).
@@ -83,6 +85,9 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ```bash
 ./run.sh upgrade --tags docker            # Only update containers
 ./run.sh upgrade --tags os -K             # Only OS package upgrades
+./run.sh upgrade --tags snap -K           # Only Snap package upgrades (192.168.4.18)
+./run.sh upgrade --tags vlc               # Only restart VLC video stream (192.168.4.18)
+./run.sh restart-vlc                      # Dedicated shortcut to restart VLC stream
 ./run.sh upgrade --tags backup -K         # Only backups
 ./run.sh upgrade --skip-tags backup -K    # Upgrade without backup
 ./run.sh upgrade --limit 192.168.4.4 -K   # Single host
@@ -176,6 +181,7 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `backup.yml`: Dedicated playbook for `rpi-clone` backups.
 * `ping.yml`: Quick connectivity verification playbook.
 * `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
+* `tasks/restart_vlc_stream.yml`: Modular task to cleanly stop, launch, and verify persistent fullscreen VLC video stream.
 * `run.sh`: Main entrypoint for humans and automation.
 * `requirements.txt`: Python package requirements.
 * `AGENTS.md` / `CLAUDE.md`: Repository instructions and conventions for AI assistants.

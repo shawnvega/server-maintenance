@@ -35,18 +35,21 @@ Verify SSH connectivity and privilege escalation readiness before starting maint
 Targets hosts in the `standard_servers` group (`192.168.4.4`, `192.168.4.5`, `192.168.4.18`, `192.168.4.19`).
 
 ```bash
-# Full pipeline (Load check -> rpi-clone backup -> OS packages -> Docker compose pull & recreate)
+# Full pipeline (Load check -> rpi-clone backup -> OS/Snap packages -> Docker pull & recreate -> VLC stream)
 ./run.sh upgrade -K
 
 # Run on a single host
-./run.sh upgrade --limit 192.168.4.4 -K
+./run.sh upgrade --limit 192.168.4.18 -K
 
 # Skip backup (e.g., if already backed up recently)
 ./run.sh upgrade --skip-tags backup -K
 
 # Selective stage execution:
 ./run.sh upgrade --tags os -K          # OS package upgrades only
+./run.sh upgrade --tags snap -K        # Snap package upgrades only (192.168.4.18)
 ./run.sh upgrade --tags docker         # Docker container updates only (no sudo needed)
+./run.sh upgrade --tags vlc            # Restart VLC stream only (192.168.4.18)
+./run.sh restart-vlc                   # Shortcut to restart VLC video stream
 ./run.sh upgrade --tags backup -K      # Pre-upgrade backups only
 ```
 

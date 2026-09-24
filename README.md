@@ -8,7 +8,7 @@ Ansible automation for managing home servers natively (load monitoring, rpi-clon
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich-ml` | Read/Write |
-| `192.168.4.18` | `shawn` | Debian (Pi OS) | None | `glances` | Read/Write |
+| `192.168.4.18` | `shawn` | Debian / Ubuntu | None | `glances`, persistent VLC stream (`snap` vlc) | Read/Write |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | `glances0`, `frigate0` | Read/Write |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink` | **Read-Only (OverlayFS & Boot Protection)** |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | PiKVM (`kvmd`) | **Read-Only (Native ext4/vfat ro)** |
@@ -37,15 +37,17 @@ Upgrades **all 6 servers simultaneously** using Ansible's `strategy: free`:
 * `192.168.4.11` checks overlay and boot write protection, disables overlay, reboots into RW mode, and remounts `/boot/firmware` as RW.
 * `192.168.4.66` checks load, runs `pikvm-update --no-reboot`, and reboots cleanly back into verified Read-Only mode if updates applied.
 * Concurrently, standard servers run their backups, OS updates, and Docker pulls without waiting for `.11`'s reboot.
-* OS upgrades run across all machines in parallel (with pre-upgrade dpkg healing on Debian).
+* OS and package upgrades run across all machines in parallel (APT/DNF and Snap packages like `vlc` on `.18`, with pre-upgrade dpkg healing on Debian).
+* Standard servers restart Docker stacks and restart persistent VLC video streams (`192.168.4.18`).
 * Prompt for sudo password once (`-K`) for standard hosts and `.11` (`root@192.168.4.66` connects directly without sudo).
 
 ### 2. Standard Servers Only (`upgrade.yml`)
 Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without touching `.11` or `.66`:
 1. **Load Check (`tags: [load_check]`)**: Waits for CPU load average to drop below threshold (`2.0` on `.18`, `4.0` on others).
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`.
-3. **OS Packages (`tags: [os]`)**: Uses `apt full-upgrade` on Debian hosts and `dnf upgrade` on Fedora.
+3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt full-upgrade` on Debian hosts, `dnf upgrade` on Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime rolling update (`docker compose pull` while services stay online, then rolling `docker compose up -d` with load checks between each stack).
+5. **VLC Video Streams (`tags: [vlc, snap, os]`)**: Stops prior instance, starts background fullscreen stream (`DISPLAY=:0`), and verifies process execution.
 
 ### 3. Read-Only Pi Maintenance Only (`readonly_upgrade.yml`)
 Automates the full maintenance cycle for `192.168.4.11` in isolation:
@@ -111,23 +113,35 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh upgrade --tags os -K
 ```
 
-### 9. Backup Only
+### 9. Snap Package Updates Only
+```bash
+./run.sh upgrade --tags snap -K
+```
+
+### 10. Restart VLC Stream Only
+```bash
+./run.sh restart-vlc
+# Or via tags:
+./run.sh upgrade --tags vlc
+```
+
+### 11. Backup Only
 ```bash
 ./run.sh backup -K
 ```
 
-### 10. Disk Space Maintenance & Cleanup
+### 12. Disk Space Maintenance & Cleanup
 ```bash
 ./run.sh cleanup -K                      # Clean disk space across all standard servers
 ./run.sh cleanup --limit 192.168.4.18 -K # Clean disk space on a specific host
 ```
 
-### 11. Target a Single Server
+### 13. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 12. Run Arbitrary Ad-hoc Commands
+### 14. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -150,7 +164,8 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── pikvm_upgrade.yml      # PiKVM automated maintenance & reboot cycle
 ├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)
 ├── tasks/
-│   └── restart_docker_stack.yml # Modular stack restart with load check
+│   ├── restart_docker_stack.yml # Modular stack restart with load check
+│   └── restart_vlc_stream.yml   # Modular persistent VLC fullscreen stream restart
 ├── requirements.txt       # Python dependencies
 ├── run.sh                 # Convenience CLI wrapper
 └── .venv/                 # Local Python virtual environment (gitignored)
