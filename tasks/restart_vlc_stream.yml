@@ -1,8 +1,27 @@
 ---
-- name: Stop running VLC stream and allow clean exit
+- name: Stop running VLC stream and wait for process termination
   tags: [vlc, snap, os]
   ansible.builtin.shell:
-    cmd: "pkill -f vlc || true; sleep 2"
+    cmd: |
+      pkill -x vlc 2>/dev/null || true
+      for i in 1 2 3 4 5; do
+        pgrep -x vlc >/dev/null || break
+        sleep 1
+      done
+      pkill -9 -x vlc 2>/dev/null || true
+      sleep 2
+  changed_when: false
+  failed_when: false
+
+- name: Wait for any active snap auto-refresh to complete before starting VLC
+  tags: [vlc, snap, os]
+  ansible.builtin.shell:
+    cmd: |
+      if command -v snap >/dev/null 2>&1; then
+        for id in $(snap changes | awk '$2 == "Doing" {print $1}'); do
+          snap watch "$id" || true
+        done
+      fi
   changed_when: false
   failed_when: false
 
@@ -21,11 +40,11 @@
 - name: Verify VLC stream process is running
   tags: [vlc, snap, os]
   ansible.builtin.shell:
-    cmd: "pgrep -f 'vlc.*{{ vlc_stream_url | regex_escape }}' || pgrep -f 'vlc'"
+    cmd: "pgrep -x vlc"
   register: vlc_pgrep
   until: vlc_pgrep.rc == 0
-  retries: 5
-  delay: 1
+  retries: 15
+  delay: 2
   changed_when: false
   failed_when: vlc_pgrep.rc != 0
 

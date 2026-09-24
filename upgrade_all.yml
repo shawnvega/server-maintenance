@@ -264,7 +264,29 @@
         - snap_packages is defined
         - "'vlc' in snap_packages"
       ansible.builtin.shell:
-        cmd: "pkill -f vlc || true"
+        cmd: |
+          pkill -x vlc 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            pgrep -x vlc >/dev/null || break
+            sleep 1
+          done
+          pkill -9 -x vlc 2>/dev/null || true
+          sleep 2
+      changed_when: false
+      failed_when: false
+
+    - name: "[Standard] Wait for any in-progress snap changes (e.g. auto-refresh triggered on close)"
+      tags: [os, snap]
+      when:
+        - inventory_hostname in groups.get('standard_servers', [])
+        - snap_packages is defined
+        - (snap_packages | length) > 0
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          for id in $(snap changes | awk '$2 == "Doing" {print $1}'); do
+            snap watch "$id" || true
+          done
       changed_when: false
       failed_when: false
 
@@ -276,8 +298,14 @@
         - (snap_packages | length) > 0
       become: true
       loop: "{{ snap_packages | default([]) }}"
-      ansible.builtin.command:
-        cmd: "snap refresh {{ item }}"
+      ansible.builtin.shell:
+        cmd: |
+          snap refresh "{{ item }}" 2>&1 || {
+            for id in $(snap changes | awk '$2 == "Doing" {print $1}'); do
+              snap watch "$id" && exit 0
+            done
+            exit 1
+          }
       register: snap_refresh_out
       changed_when: "'refreshed' in snap_refresh_out.stdout"
       failed_when:
