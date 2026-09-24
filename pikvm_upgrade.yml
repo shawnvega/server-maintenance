@@ -1,0 +1,136 @@
+---
+- name: Upgrade PiKVM Server (Arch Linux ARM Read-Only Maintenance & Reboot Cycle)
+  hosts: pikvm_servers
+  gather_facts: true
+  become: false
+
+  tasks:
+    # -------------------------------------------------------------
+    # Step 1: Detect Initial Filesystem Mount States
+    # -------------------------------------------------------------
+    - name: Check initial root filesystem mount status
+      tags: [mount, check]
+      ansible.builtin.shell: |
+        findmnt -n -o OPTIONS / | grep -qw ro && echo "ro" || echo "rw"
+      register: initial_root_mount
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Check initial boot partition mount status
+      tags: [mount, check]
+      ansible.builtin.shell: |
+        findmnt -n -o OPTIONS /boot | grep -qw ro && echo "ro" || echo "rw"
+      register: initial_boot_mount
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Display initial mount modes
+      tags: [mount, check]
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "Root filesystem initial status: {{ 'Read-Only' if initial_root_mount.stdout | trim == 'ro' else 'Read/Write' }}"
+          - "Boot partition initial status: {{ 'Read-Only' if initial_boot_mount.stdout | trim == 'ro' else 'Read/Write' }}"
+
+    # -------------------------------------------------------------
+    # Step 2: System Load Check
+    # -------------------------------------------------------------
+    - name: Check current system load
+      tags: [load_check]
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: current_load
+      changed_when: false
+      check_mode: false
+
+    - name: Display current system load
+      tags: [load_check]
+      ansible.builtin.debug:
+        msg: "Current 1-min load: {{ current_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
+
+    - name: "Wait for system load to drop below threshold (<= {{ load_threshold | default(4.0) }})"
+      tags: [load_check]
+      when: (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: wait_load
+      until: (wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
+      retries: 30
+      delay: 30
+      changed_when: false
+      check_mode: false
+
+    # -------------------------------------------------------------
+    # Step 3: Execute Official PiKVM Update Script
+    # -------------------------------------------------------------
+    - name: Run PiKVM system upgrade via pikvm-update
+      tags: [upgrade, pikvm]
+      ansible.builtin.command:
+        cmd: "pikvm-update --no-reboot"
+      register: pikvm_update_result
+      failed_when: pikvm_update_result.rc not in [0, 100]
+      changed_when: pikvm_update_result.rc == 100
+
+    - name: Display upgrade output
+      tags: [upgrade, pikvm]
+      ansible.builtin.debug:
+        var: pikvm_update_result.stdout_lines
+
+    # -------------------------------------------------------------
+    # Step 4: Restore Read-Only Mode (Reboot on update, or ro lock)
+    # -------------------------------------------------------------
+    - name: Reboot PiKVM to apply updates and restore read-only mode
+      tags: [upgrade, pikvm, reboot]
+      when: pikvm_update_result.rc == 100
+      ansible.builtin.reboot:
+        msg: "Rebooting to apply PiKVM software updates and restore read-only mode"
+        pre_reboot_delay: 2
+        post_reboot_delay: 15
+        reboot_timeout: 600
+
+    - name: Ensure filesystems are locked in read-only mode if no reboot was required
+      tags: [upgrade, pikvm, ro]
+      when: pikvm_update_result.rc == 0
+      ansible.builtin.command:
+        cmd: "/usr/bin/ro"
+      register: ro_result
+      changed_when: false
+      failed_when: false
+
+    # -------------------------------------------------------------
+    # Step 5: Post-Upgrade Verification
+    # -------------------------------------------------------------
+    - name: Verify root filesystem is safely in Read-Only mode
+      tags: [verify, ro]
+      ansible.builtin.shell: |
+        findmnt -n -o OPTIONS / | grep -qw ro
+      register: ro_check
+      failed_when: ro_check.rc != 0
+      changed_when: false
+
+    - name: Verify boot partition is safely in Read-Only mode
+      tags: [verify, ro]
+      ansible.builtin.shell: |
+        findmnt -n -o OPTIONS /boot | grep -qw ro
+      register: bootro_check
+      failed_when: bootro_check.rc != 0
+      changed_when: false
+
+    - name: Verify KVMD service configuration integrity
+      tags: [verify, kvmd]
+      ansible.builtin.command:
+        cmd: "kvmd -m"
+      register: kvmd_check
+      failed_when: kvmd_check.rc != 0
+      changed_when: false
+
+    - name: Success confirmation
+      tags: [verify]
+      ansible.builtin.debug:
+        msg:
+          - "PiKVM ({{ inventory_hostname }}) upgraded and verified successfully!"
+          - "Root filesystem: Read-Only"
+          - "Boot partition: Read-Only"
+          - "KVMD integrity: Verified"

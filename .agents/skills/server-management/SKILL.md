@@ -51,23 +51,39 @@ Targets hosts in the `standard_servers` group (`192.168.4.4`, `192.168.4.5`, `19
 ```
 
 ### C. Read-Only Raspberry Pi Maintenance Cycle
-Targets `192.168.4.11` running Debian/Pi OS with an active OverlayFS.
+Targets `192.168.4.11` running Debian/Pi OS with active OverlayFS and Boot Write Protection.
 
 ```bash
 ./run.sh upgrade-ro -K
 ```
-**Cycle steps executed by [readonly_upgrade.yml](file:///Users/shawn/StudioProjects/selfhosted/readonly_upgrade.yml)**:
-1. Detect overlay status (`raspi-config nonint get_overlay_now`).
-2. Switch configuration to Read/Write (`raspi-config nonint do_overlayfs 1`).
-3. Reboot and poll until SSH recovers.
-4. Verify filesystem is Read/Write (`stdout == '1'`).
+**Cycle steps executed by [readonly_upgrade.yml](file:///Users/shawn/StudioProjects/server-maintenance/readonly_upgrade.yml)**:
+1. Detect OverlayFS (`raspi-config nonint get_overlay_now`/`get_overlay_conf`) and Boot Write Protection (`get_bootro_now`/`get_bootro_conf`).
+2. Switch overlay to Read/Write (`raspi-config nonint do_overlayfs 1`) and reboot into RW mode.
+3. Remount `/boot/firmware` (or `/boot`) as Read/Write (`mount -o remount,rw ...`).
+4. Verify both root filesystem and boot partition are writable (`get_overlay_now == 1` and `get_bootro_now == 1`).
 5. Wait for system loadavg to drop below `load_threshold`.
-6. Upgrade OS packages (`apt update && apt full-upgrade -y && apt autoremove`).
-7. Switch configuration back to Read-Only (`raspi-config nonint do_overlayfs 0`).
-8. Reboot and poll until SSH recovers.
-9. Verify filesystem is safely Read-Only (`stdout == '0'`).
+6. Resolve pending package configurations (`dpkg --configure -a`).
+7. Upgrade OS packages (`apt update && apt full-upgrade -y && apt autoremove`).
+8. Ensure boot write protection in `/etc/fstab` (`raspi-config nonint enable_bootro`) and remount boot partition as Read-Only.
+9. Switch overlay configuration back to Read-Only (`raspi-config nonint do_overlayfs 0`).
+10. Reboot and poll until SSH recovers.
+11. Verify both filesystem overlay and boot partition are safely in Read-Only mode (`get_overlay_now == 0` and `get_bootro_now == 0`).
 
-### D. Dedicated Backups (`rpi-clone`)
+### D. PiKVM Server Maintenance Cycle
+Targets `192.168.4.66` running Arch Linux ARM with native read-only mounts and `kvmd`.
+
+```bash
+./run.sh upgrade-pikvm
+```
+**Cycle steps executed by [pikvm_upgrade.yml](file:///Users/shawn/StudioProjects/server-maintenance/pikvm_upgrade.yml)**:
+1. Detect `/` and `/boot` mount states via `findmnt`.
+2. Wait for system loadavg to drop below `load_threshold`.
+3. Run official `/usr/bin/pikvm-update --no-reboot` (handles repo sync, cleanup, packages, and `kvmd -m` integrity verification).
+4. If updates were applied (exit code 100), reboot to cleanly return to verified Read-Only mode. If already up-to-date (exit code 0), lock read-only via `/usr/bin/ro`.
+5. Verify both root filesystem and boot partition are safely in Read-Only mode (`findmnt -n -o OPTIONS / | grep -qw ro` and `findmnt -n -o OPTIONS /boot | grep -qw ro`).
+6. Verify KVMD service configuration integrity (`kvmd -m`).
+
+### E. Dedicated Backups (`rpi-clone`)
 Run hardware backups to destination SD/NVMe/USB storage:
 ```bash
 # Run backup for all configured hosts (192.168.4.4, 192.168.4.5)

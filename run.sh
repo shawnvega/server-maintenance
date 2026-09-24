@@ -24,8 +24,9 @@ usage() {
   echo "  ping                 Test SSH connectivity to all servers"
   echo "  backup               Run backup (rpi-clone) on configured servers"
   echo "  upgrade              Run full upgrade pipeline on standard servers"
-  echo "  upgrade-ro           Run upgrade on read-only Pi (RW -> reboot -> apt -> RO -> reboot)"
-  echo "  upgrade-all          Run concurrent upgrades across ALL servers (standard + read-only Pi)"
+  echo "  upgrade-ro           Run upgrade on read-only Pi (192.168.4.11 OverlayFS cycle)"
+  echo "  upgrade-pikvm        Run upgrade on PiKVM (192.168.4.66 pikvm-update & RO restore)"
+  echo "  upgrade-all          Run concurrent upgrades across ALL servers (standard + read-only Pi + PiKVM)"
   echo "  cleanup              Reclaim disk space (journal vacuum, apt cache, docker prune)"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
@@ -37,7 +38,8 @@ usage() {
   echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
   echo "  $0 upgrade -K                      # Standard servers: backup -> OS -> Docker"
   echo "  $0 upgrade-ro -K                   # Read-only Pi (192.168.4.11) upgrade cycle"
-  echo "  $0 upgrade-all -K                  # All 5 servers simultaneously (strategy: free)"
+  echo "  $0 upgrade-pikvm                   # PiKVM (192.168.4.66) upgrade cycle"
+  echo "  $0 upgrade-all -K                  # All servers simultaneously (strategy: free)"
   echo "  $0 upgrade --tags os -K            # OS package upgrades only"
   echo "  $0 upgrade --tags docker           # Docker containers only (minimal downtime)"
   echo "  $0 upgrade --skip-tags backup -K   # Skip backup and run OS + Docker upgrades"
@@ -65,6 +67,9 @@ case "${CMD}" in
     ;;
   upgrade-ro)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/readonly_upgrade.yml" "$@"
+    ;;
+  upgrade-pikvm)
+    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/pikvm_upgrade.yml" "$@"
     ;;
   upgrade-all)
     exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade_all.yml" "$@"

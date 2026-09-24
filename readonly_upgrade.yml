@@ -1,14 +1,14 @@
 ---
-- name: Upgrade Read-Only Raspberry Pi (OverlayFS Toggle & Reboot Cycle)
+- name: Upgrade Read-Only Raspberry Pi (OverlayFS & Boot Protection Toggle & Reboot Cycle)
   hosts: readonly_servers
   gather_facts: true
   become: true
 
   tasks:
     # -------------------------------------------------------------
-    # Step 1: Detect Overlay State
+    # Step 1: Detect Overlay and Boot Write Protection States
     # -------------------------------------------------------------
-    - name: Check current overlay filesystem status
+    - name: Check current running overlay filesystem status
       tags: [overlay, check]
       ansible.builtin.command:
         cmd: "raspi-config nonint get_overlay_now"
@@ -17,37 +17,92 @@
       failed_when: false
       check_mode: false
 
-    - name: Display current mode
+    - name: Check configured overlay filesystem status (cmdline)
       tags: [overlay, check]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_conf"
+      register: initial_overlay_conf
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Check current running boot write protection status
+      tags: [bootro, check]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_now"
+      register: initial_bootro_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Check configured boot write protection status (fstab)
+      tags: [bootro, check]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_conf"
+      register: initial_bootro_conf
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Determine protection settings to restore
+      tags: [overlay, bootro, check]
+      ansible.builtin.set_fact:
+        overlay_was_active: "{{ (initial_overlay_status.stdout | default('1') | trim) == '0' }}"
+        overlay_should_restore: "{{ (initial_overlay_status.stdout | default('1') | trim) == '0' or (initial_overlay_conf.stdout | default('1') | trim) == '0' or (overlay_readonly | default(true) | bool) }}"
+        bootro_should_restore: "{{ (initial_bootro_status.stdout | default('1') | trim) == '0' or (initial_bootro_conf.stdout | default('1') | trim) == '0' or (boot_readonly | default(true) | bool) }}"
+
+    - name: Display current protection modes
+      tags: [overlay, bootro, check]
       ansible.builtin.debug:
-        msg: >-
-          {{ 'Currently in Read-Only mode (overlay active).' if (initial_overlay_status.stdout | trim) == '0'
-             else 'Currently in Read/Write mode (overlay disabled).' }}
+        msg:
+          - "OverlayFS currently running: {{ 'Read-Only (Active)' if overlay_was_active else 'Read/Write (Disabled)' }}"
+          - "OverlayFS configured: {{ 'Read-Only (Enabled)' if (initial_overlay_conf.stdout | default('1') | trim) == '0' else 'Read/Write (Disabled)' }}"
+          - "Boot partition currently mounted: {{ 'Read-Only' if (initial_bootro_status.stdout | default('1') | trim) == '0' else 'Read/Write' }}"
+          - "Boot partition configured in fstab: {{ 'Read-Only' if (initial_bootro_conf.stdout | default('1') | trim) == '0' else 'Read/Write' }}"
+          - "Will restore after upgrades -> OverlayFS: {{ overlay_should_restore }}, Boot Write Protection: {{ bootro_should_restore }}"
 
     # -------------------------------------------------------------
-    # Step 2: Switch to Read/Write and Reboot (if in RO mode)
+    # Step 2: Switch to Read/Write and Reboot if necessary
     # -------------------------------------------------------------
     - name: Disable overlay filesystem (switch config to Read/Write)
       tags: [overlay, rw]
-      when: (initial_overlay_status.stdout | trim) == '0'
+      when: overlay_was_active
       ansible.builtin.command:
         cmd: "raspi-config nonint do_overlayfs 1"
 
     - name: Reboot into Read/Write mode and wait for host
       tags: [overlay, rw, reboot]
-      when: (initial_overlay_status.stdout | trim) == '0'
+      when: overlay_was_active
       ansible.builtin.reboot:
         msg: "Rebooting into Read/Write mode for maintenance"
         pre_reboot_delay: 2
         post_reboot_delay: 10
-        reboot_timeout: 300
+        reboot_timeout: 600
 
-    - name: Verify filesystem is running in Read/Write mode
+    - name: Verify root filesystem is running in Read/Write mode
       tags: [overlay, rw]
       ansible.builtin.command:
         cmd: "raspi-config nonint get_overlay_now"
       register: rw_check
       failed_when: rw_check.rc != 0 or (rw_check.stdout | trim) != '1'
+      changed_when: false
+
+    - name: Remount boot partition as Read/Write for package updates
+      tags: [bootro, rw, upgrade, os]
+      ansible.builtin.shell: |
+        if mountpoint -q /boot/firmware; then
+          mount -o remount,rw /boot/firmware
+        elif mountpoint -q /boot; then
+          mount -o remount,rw /boot
+        fi
+      changed_when: false
+
+    - name: Verify boot partition is mounted Read/Write
+      tags: [bootro, rw]
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_now"
+      register: boot_rw_check
+      failed_when: boot_rw_check.rc != 0 or (boot_rw_check.stdout | trim) != '1'
       changed_when: false
 
     # -------------------------------------------------------------
@@ -84,6 +139,12 @@
       ansible.builtin.debug:
         msg: "System load dropped to: {{ wait_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
 
+    - name: Ensure any pending dpkg configurations are resolved
+      tags: [upgrade, os]
+      ansible.builtin.command:
+        cmd: "dpkg --configure -a"
+      changed_when: false
+
     - name: Upgrade OS packages via apt (update, full-upgrade, autoremove)
       tags: [upgrade, os]
       ansible.builtin.apt:
@@ -91,6 +152,7 @@
         upgrade: full
         autoremove: true
         autoclean: true
+        purge: true
       register: apt_result
 
     - name: Display apt upgrade summary
@@ -99,30 +161,64 @@
         msg: "APT packages updated successfully."
 
     # -------------------------------------------------------------
-    # Step 4: Re-enable Overlay and Reboot back to Read-Only
+    # Step 4: Re-enable Protections and Reboot back to Read-Only
     # -------------------------------------------------------------
+    - name: Ensure boot write protection is configured in fstab
+      tags: [bootro, ro]
+      when:
+        - bootro_should_restore
+        - (initial_bootro_conf.stdout | default('1') | trim) != '0'
+      ansible.builtin.command:
+        cmd: "raspi-config nonint enable_bootro"
+
+    - name: Remount boot partition back to Read-Only
+      tags: [bootro, ro]
+      when: bootro_should_restore
+      ansible.builtin.shell: |
+        if mountpoint -q /boot/firmware; then
+          mount -o remount,ro /boot/firmware
+        elif mountpoint -q /boot; then
+          mount -o remount,ro /boot
+        fi
+      changed_when: false
+
     - name: Re-enable overlay filesystem (switch config to Read-Only)
       tags: [overlay, ro]
+      when: overlay_should_restore
       ansible.builtin.command:
         cmd: "raspi-config nonint do_overlayfs 0"
 
     - name: Reboot into Read-Only mode and wait for host
       tags: [overlay, ro, reboot]
+      when: overlay_should_restore
       ansible.builtin.reboot:
         msg: "Rebooting back into Read-Only mode"
         pre_reboot_delay: 2
         post_reboot_delay: 10
-        reboot_timeout: 300
+        reboot_timeout: 600
 
-    - name: Verify filesystem is safely back in Read-Only mode
+    - name: Verify root filesystem is safely back in Read-Only mode
       tags: [overlay, ro]
+      when: overlay_should_restore
       ansible.builtin.command:
         cmd: "raspi-config nonint get_overlay_now"
       register: ro_check
       failed_when: ro_check.rc != 0 or (ro_check.stdout | trim) != '0'
       changed_when: false
 
+    - name: Verify boot partition is safely in Read-Only mode
+      tags: [bootro, ro]
+      when: bootro_should_restore
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_now"
+      register: bootro_check
+      failed_when: bootro_check.rc != 0 or (bootro_check.stdout | trim) != '0'
+      changed_when: false
+
     - name: Success confirmation
-      tags: [overlay, ro]
+      tags: [overlay, bootro, ro]
       ansible.builtin.debug:
-        msg: "Host {{ inventory_hostname }} has been upgraded and is safely operating in Read-Only mode!"
+        msg:
+          - "Host {{ inventory_hostname }} has been upgraded successfully!"
+          - "OverlayFS status: {{ 'Active Read-Only' if overlay_should_restore else 'Disabled' }}"
+          - "Boot partition status: {{ 'Active Read-Only' if bootro_should_restore else 'Writable' }}"

@@ -6,25 +6,65 @@
 
   tasks:
     # =============================================================
-    # Stage RO-1: Read-Only Pi Overlay Preparation (192.168.4.11)
+    # Stage RO-1: Read-Only Pi Protection Preparation (192.168.4.11)
     # =============================================================
     - name: "[RO-Pi] Check initial overlay filesystem status"
       tags: [readonly, check]
-      when: overlay_readonly | default(false)
+      when: overlay_readonly | default(false) | bool
       become: true
       ansible.builtin.command:
         cmd: "raspi-config nonint get_overlay_now"
-      register: initial_overlay_status
+      register: ro_initial_overlay_status
       changed_when: false
       failed_when: false
       check_mode: false
 
+    - name: "[RO-Pi] Check configured overlay filesystem status"
+      tags: [readonly, check]
+      when: overlay_readonly | default(false) | bool
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_overlay_conf"
+      register: ro_initial_overlay_conf
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: "[RO-Pi] Check initial boot write protection status"
+      tags: [readonly, check]
+      when: overlay_readonly | default(false) | bool
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_now"
+      register: ro_initial_bootro_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: "[RO-Pi] Check configured boot write protection status (fstab)"
+      tags: [readonly, check]
+      when: overlay_readonly | default(false) | bool
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_conf"
+      register: ro_initial_bootro_conf
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: "[RO-Pi] Determine protection settings to restore"
+      tags: [readonly, check]
+      when: overlay_readonly | default(false) | bool
+      ansible.builtin.set_fact:
+        ro_overlay_was_active: "{{ (ro_initial_overlay_status.stdout | default('1') | trim) == '0' }}"
+        ro_overlay_should_restore: "{{ (ro_initial_overlay_status.stdout | default('1') | trim) == '0' or (ro_initial_overlay_conf.stdout | default('1') | trim) == '0' or (overlay_readonly | default(true) | bool) }}"
+        ro_bootro_should_restore: "{{ (ro_initial_bootro_status.stdout | default('1') | trim) == '0' or (ro_initial_bootro_conf.stdout | default('1') | trim) == '0' or (boot_readonly | default(true) | bool) }}"
+
     - name: "[RO-Pi] Disable overlay filesystem (switch config to Read/Write)"
       tags: [readonly, rw]
       when:
-        - overlay_readonly | default(false)
-        - initial_overlay_status is defined
-        - (initial_overlay_status.stdout | default('') | trim) == '0'
+        - overlay_readonly | default(false) | bool
+        - ro_overlay_was_active | default(false)
       become: true
       ansible.builtin.command:
         cmd: "raspi-config nonint do_overlayfs 1"
@@ -32,19 +72,18 @@
     - name: "[RO-Pi] Reboot into Read/Write mode and wait for host to return"
       tags: [readonly, rw, reboot]
       when:
-        - overlay_readonly | default(false)
-        - initial_overlay_status is defined
-        - (initial_overlay_status.stdout | default('') | trim) == '0'
+        - overlay_readonly | default(false) | bool
+        - ro_overlay_was_active | default(false)
       become: true
       ansible.builtin.reboot:
         msg: "Rebooting into Read/Write mode for maintenance"
         pre_reboot_delay: 2
         post_reboot_delay: 10
-        reboot_timeout: 300
+        reboot_timeout: 600
 
     - name: "[RO-Pi] Verify filesystem is running in Read/Write mode"
       tags: [readonly, rw]
-      when: overlay_readonly | default(false)
+      when: overlay_readonly | default(false) | bool
       become: true
       ansible.builtin.command:
         cmd: "raspi-config nonint get_overlay_now"
@@ -53,12 +92,35 @@
       changed_when: false
       check_mode: false
 
+    - name: "[RO-Pi] Remount boot partition as Read/Write for package updates"
+      tags: [readonly, rw, os]
+      when: overlay_readonly | default(false) | bool
+      become: true
+      ansible.builtin.shell: |
+        if mountpoint -q /boot/firmware; then
+          mount -o remount,rw /boot/firmware
+        elif mountpoint -q /boot; then
+          mount -o remount,rw /boot
+        fi
+      changed_when: false
+
+    - name: "[RO-Pi] Verify boot partition is mounted Read/Write"
+      tags: [readonly, rw]
+      when: overlay_readonly | default(false) | bool
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_now"
+      register: boot_rw_check
+      failed_when: boot_rw_check.rc != 0 or (boot_rw_check.stdout | trim) != '1'
+      changed_when: false
+
+    # =============================================================
     # =============================================================
     # Stage STD-1: Standard Servers Load Check & Backups
     # =============================================================
     - name: "[Standard] Check current system load"
       tags: [load_check]
-      when: not (overlay_readonly | default(false))
+      when: inventory_hostname in groups.get('standard_servers', [])
       ansible.builtin.shell:
         cmd: "awk '{print $1}' /proc/loadavg"
       register: current_load
@@ -67,14 +129,14 @@
 
     - name: "[Standard] Display current system load"
       tags: [load_check]
-      when: not (overlay_readonly | default(false))
+      when: inventory_hostname in groups.get('standard_servers', [])
       ansible.builtin.debug:
         msg: "Current 1-min load: {{ current_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
 
     - name: "[Standard] Wait for system load to drop below threshold (<= {{ load_threshold | default(4.0) }})"
       tags: [load_check]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
       ansible.builtin.shell:
         cmd: "awk '{print $1}' /proc/loadavg"
@@ -88,7 +150,7 @@
     - name: "[Standard] Display updated system load"
       tags: [load_check]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - (current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
       ansible.builtin.debug:
         msg: "System load dropped to: {{ wait_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
@@ -96,7 +158,7 @@
     - name: "[Standard] Run pre-upgrade backup via rpi-clone"
       tags: [backup]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - backup_method | default('none') == 'rpi-clone'
       become: true
       ansible.builtin.command:
@@ -108,7 +170,7 @@
     - name: "[Standard] Display backup summary"
       tags: [backup]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - backup_method | default('none') == 'rpi-clone'
       ansible.builtin.debug:
         var: clone_result.stdout_lines
@@ -118,6 +180,7 @@
     # =============================================================
     - name: "[All] Ensure journald configuration drop-in directory exists"
       tags: [os]
+      when: inventory_hostname in groups.get('standard_servers', []) or inventory_hostname in groups.get('readonly_servers', [])
       become: true
       ansible.builtin.file:
         path: /etc/systemd/journald.conf.d
@@ -126,6 +189,7 @@
 
     - name: "[All] Configure journald maximum disk usage cap (100M)"
       tags: [os]
+      when: inventory_hostname in groups.get('standard_servers', []) or inventory_hostname in groups.get('readonly_servers', [])
       become: true
       ansible.builtin.copy:
         dest: /etc/systemd/journald.conf.d/maxsize.conf
@@ -137,14 +201,17 @@
 
     - name: "[All] Restart systemd-journald if configuration updated"
       tags: [os]
+      when:
+        - inventory_hostname in groups.get('standard_servers', []) or inventory_hostname in groups.get('readonly_servers', [])
+        - journal_conf.changed
       become: true
       ansible.builtin.systemd:
         name: systemd-journald
         state: restarted
-      when: journal_conf.changed
 
     - name: "[All] Vacuum systemd journal logs to 100M"
       tags: [os]
+      when: inventory_hostname in groups.get('standard_servers', []) or inventory_hostname in groups.get('readonly_servers', [])
       become: true
       ansible.builtin.command:
         cmd: "journalctl --vacuum-size=100M"
@@ -156,6 +223,14 @@
       become: true
       ansible.builtin.apt:
         clean: true
+      changed_when: false
+
+    - name: "[Debian] Ensure any pending dpkg configurations are resolved"
+      tags: [os]
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.command:
+        cmd: "dpkg --configure -a"
       changed_when: false
 
     - name: "[All] Upgrade OS packages on Debian / Raspberry Pi OS"
@@ -186,7 +261,7 @@
     - name: "[Standard] Pull updated Docker images while containers stay online"
       tags: [docker]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - docker_stacks is defined
       loop: "{{ docker_stacks | default([]) }}"
       ansible.builtin.command:
@@ -200,7 +275,7 @@
     - name: "[Standard] Restart Docker stacks with load check between each stack"
       tags: [docker]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - docker_stacks is defined
       ansible.builtin.include_tasks: tasks/restart_docker_stack.yml
       loop: "{{ docker_stacks | default([]) }}"
@@ -210,7 +285,7 @@
     - name: "[Standard] Prune dangling and unused Docker images"
       tags: [docker]
       when:
-        - not (overlay_readonly | default(false))
+        - inventory_hostname in groups.get('standard_servers', [])
         - docker_stacks is defined
         - (docker_stacks | length) > 0
       ansible.builtin.command:
@@ -222,26 +297,56 @@
     # =============================================================
     # Stage RO-2: Read-Only Pi Restore & Final Reboot (192.168.4.11)
     # =============================================================
+    - name: "[RO-Pi] Ensure boot write protection is configured in fstab"
+      tags: [readonly, ro]
+      when:
+        - overlay_readonly | default(false) | bool
+        - ro_bootro_should_restore | default(false)
+        - (ro_initial_bootro_conf.stdout | default('1') | trim) != '0'
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint enable_bootro"
+
+    - name: "[RO-Pi] Remount boot partition back to Read-Only"
+      tags: [readonly, ro]
+      when:
+        - overlay_readonly | default(false) | bool
+        - ro_bootro_should_restore | default(false)
+      become: true
+      ansible.builtin.shell: |
+        if mountpoint -q /boot/firmware; then
+          mount -o remount,ro /boot/firmware
+        elif mountpoint -q /boot; then
+          mount -o remount,ro /boot
+        fi
+      changed_when: false
+
     - name: "[RO-Pi] Re-enable overlay filesystem (switch config to Read-Only)"
       tags: [readonly, ro]
-      when: overlay_readonly | default(false)
+      when:
+        - overlay_readonly | default(false) | bool
+        - ro_overlay_should_restore | default(false)
       become: true
       ansible.builtin.command:
         cmd: "raspi-config nonint do_overlayfs 0"
 
     - name: "[RO-Pi] Reboot back into Read-Only mode and wait for host to return"
       tags: [readonly, ro, reboot]
-      when: overlay_readonly | default(false)
+      when:
+        - overlay_readonly | default(false) | bool
+        - ro_overlay_should_restore | default(false)
       become: true
       ansible.builtin.reboot:
         msg: "Rebooting back into Read-Only mode"
         pre_reboot_delay: 2
         post_reboot_delay: 10
-        reboot_timeout: 300
+        reboot_timeout: 600
 
-    - name: "[RO-Pi] Verify filesystem is safely back in Read-Only mode"
+    - name: "[RO-Pi] Verify root filesystem is safely back in Read-Only mode"
       tags: [readonly, ro]
-      when: overlay_readonly | default(false)
+      when:
+        - overlay_readonly | default(false) | bool
+        - ro_overlay_should_restore | default(false)
       become: true
       ansible.builtin.command:
         cmd: "raspi-config nonint get_overlay_now"
@@ -249,3 +354,106 @@
       failed_when: ro_check.rc != 0 or (ro_check.stdout | trim) != '0'
       changed_when: false
       check_mode: false
+
+    - name: "[RO-Pi] Verify boot partition is safely in Read-Only mode"
+      tags: [readonly, ro]
+      when:
+        - overlay_readonly | default(false) | bool
+        - ro_bootro_should_restore | default(false)
+      become: true
+      ansible.builtin.command:
+        cmd: "raspi-config nonint get_bootro_now"
+      register: bootro_check
+      failed_when: bootro_check.rc != 0 or (bootro_check.stdout | trim) != '0'
+      changed_when: false
+      check_mode: false
+
+    # =============================================================
+    # Stage PIKVM: PiKVM Maintenance Cycle (192.168.4.66)
+    # =============================================================
+    - name: "[PiKVM] Check current system load"
+      tags: [pikvm, load_check]
+      when: inventory_hostname in groups.get('pikvm_servers', [])
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: pikvm_current_load
+      changed_when: false
+      check_mode: false
+
+    - name: "[PiKVM] Wait for system load to drop below threshold (<= {{ load_threshold | default(4.0) }})"
+      tags: [pikvm, load_check]
+      when:
+        - inventory_hostname in groups.get('pikvm_servers', [])
+        - (pikvm_current_load.stdout | default('0') | float) > (load_threshold | default(4.0) | float)
+      ansible.builtin.shell:
+        cmd: "awk '{print $1}' /proc/loadavg"
+      register: pikvm_wait_load
+      until: (pikvm_wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
+      retries: 30
+      delay: 30
+      changed_when: false
+      check_mode: false
+
+    - name: "[PiKVM] Run PiKVM system upgrade via pikvm-update"
+      tags: [pikvm, upgrade]
+      when: inventory_hostname in groups.get('pikvm_servers', [])
+      ansible.builtin.command:
+        cmd: "pikvm-update --no-reboot"
+      register: pikvm_update_result
+      failed_when: pikvm_update_result.rc not in [0, 100]
+      changed_when: pikvm_update_result.rc == 100
+
+    - name: "[PiKVM] Display upgrade output"
+      tags: [pikvm, upgrade]
+      when: inventory_hostname in groups.get('pikvm_servers', [])
+      ansible.builtin.debug:
+        var: pikvm_update_result.stdout_lines
+
+    - name: "[PiKVM] Reboot to apply updates and restore read-only mode"
+      tags: [pikvm, upgrade, reboot]
+      when:
+        - inventory_hostname in groups.get('pikvm_servers', [])
+        - pikvm_update_result.rc == 100
+      ansible.builtin.reboot:
+        msg: "Rebooting to apply PiKVM software updates and restore read-only mode"
+        pre_reboot_delay: 2
+        post_reboot_delay: 15
+        reboot_timeout: 600
+
+    - name: "[PiKVM] Ensure filesystems are locked in read-only mode if no reboot was required"
+      tags: [pikvm, upgrade, ro]
+      when:
+        - inventory_hostname in groups.get('pikvm_servers', [])
+        - pikvm_update_result.rc == 0
+      ansible.builtin.command:
+        cmd: "/usr/bin/ro"
+      register: pikvm_ro_result
+      changed_when: false
+      failed_when: false
+
+    - name: "[PiKVM] Verify root filesystem is safely in Read-Only mode"
+      tags: [pikvm, verify, ro]
+      when: inventory_hostname in groups.get('pikvm_servers', [])
+      ansible.builtin.shell: |
+        findmnt -n -o OPTIONS / | grep -qw ro
+      register: pikvm_ro_check
+      failed_when: pikvm_ro_check.rc != 0
+      changed_when: false
+
+    - name: "[PiKVM] Verify boot partition is safely in Read-Only mode"
+      tags: [pikvm, verify, ro]
+      when: inventory_hostname in groups.get('pikvm_servers', [])
+      ansible.builtin.shell: |
+        findmnt -n -o OPTIONS /boot | grep -qw ro
+      register: pikvm_bootro_check
+      failed_when: pikvm_bootro_check.rc != 0
+      changed_when: false
+
+    - name: "[PiKVM] Verify KVMD service configuration integrity"
+      tags: [pikvm, verify, kvmd]
+      when: inventory_hostname in groups.get('pikvm_servers', [])
+      ansible.builtin.command:
+        cmd: "kvmd -m"
+      register: pikvm_kvmd_check
+      failed_when: pikvm_kvmd_check.rc != 0
+      changed_when: false

@@ -1,6 +1,6 @@
 # Selfhosted Infrastructure & Automation
 
-Ansible automation for managing home servers natively (load monitoring, rpi-clone backups, OS updates, Docker compose services, and read-only overlay Pi maintenance).
+Ansible automation for managing home servers natively (load monitoring, rpi-clone backups, OS updates, Docker compose services, read-only overlay Pi maintenance, and Arch Linux ARM PiKVM maintenance).
 
 ## Servers Managed
 
@@ -10,21 +10,38 @@ Ansible automation for managing home servers natively (load monitoring, rpi-clon
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich-ml` | Read/Write |
 | `192.168.4.18` | `shawn` | Debian (Pi OS) | None | `glances` | Read/Write |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | `glances0`, `frigate0` | Read/Write |
-| `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink` | **Read-Only (OverlayFS)** |
+| `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink` | **Read-Only (OverlayFS & Boot Protection)** |
+| `192.168.4.66` | `root` | Arch Linux ARM | None | PiKVM (`kvmd`) | **Read-Only (Native ext4/vfat ro)** |
+
+---
+
+## Read-Only Architecture Comparison
+
+This cluster features two distinct read-only appliance implementations:
+
+| Attribute | OverlayFS Pi (`192.168.4.11`) | PiKVM (`192.168.4.66`) |
+|---|---|---|
+| **OS** | Debian / Raspberry Pi OS | Arch Linux ARM |
+| **User** | `shawn` (uses `sudo -K`) | `root` (direct SSH key) |
+| **Read-Only Mechanism** | Kernel OverlayFS (writes in RAM tmpfs) + `/boot` ro | Native ext4 root `/` and `/boot` mounted `ro` |
+| **Control Commands** | `raspi-config nonint do_overlayfs 0\|1` | `/usr/bin/rw`, `/usr/bin/ro` |
+| **Upgrade Method** | Disable overlay -> Reboot -> `apt full-upgrade` -> Enable overlay -> Reboot | `/usr/bin/pikvm-update --no-reboot` -> Reboot if updated |
+| **Verification** | `raspi-config nonint get_overlay_now` (expect `0`) | `findmnt -n -o OPTIONS /` (expect `ro`) & `kvmd -m` |
 
 ---
 
 ## Upgrade Pipelines
 
 ### 1. Concurrent Master Upgrade (`upgrade_all.yml`)
-Upgrades **all 5 servers simultaneously** using Ansible's `strategy: free`:
-* `192.168.4.11` handles its overlay disable & reboot cycle.
-* Concurrently, `.4`, `.5`, `.18`, and `.19` run their backups, OS updates, and Docker pulls without waiting for `.11`'s reboot.
-* OS upgrades run across all machines in parallel.
-* Prompt for sudo password once (`-K`).
+Upgrades **all 6 servers simultaneously** using Ansible's `strategy: free`:
+* `192.168.4.11` checks overlay and boot write protection, disables overlay, reboots into RW mode, and remounts `/boot/firmware` as RW.
+* `192.168.4.66` checks load, runs `pikvm-update --no-reboot`, and reboots cleanly back into verified Read-Only mode if updates applied.
+* Concurrently, standard servers run their backups, OS updates, and Docker pulls without waiting for `.11`'s reboot.
+* OS upgrades run across all machines in parallel (with pre-upgrade dpkg healing on Debian).
+* Prompt for sudo password once (`-K`) for standard hosts and `.11` (`root@192.168.4.66` connects directly without sudo).
 
 ### 2. Standard Servers Only (`upgrade.yml`)
-Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without touching `.11`:
+Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without touching `.11` or `.66`:
 1. **Load Check (`tags: [load_check]`)**: Waits for CPU load average to drop below threshold (`2.0` on `.18`, `4.0` on others).
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`.
 3. **OS Packages (`tags: [os]`)**: Uses `apt full-upgrade` on Debian hosts and `dnf upgrade` on Fedora.
@@ -32,12 +49,21 @@ Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without tou
 
 ### 3. Read-Only Pi Maintenance Only (`readonly_upgrade.yml`)
 Automates the full maintenance cycle for `192.168.4.11` in isolation:
-1. Checks current overlay state (`raspi-config nonint get_overlay_now`).
-2. Switches overlay to Read/Write (`raspi-config nonint do_overlayfs 1`).
-3. Reboots into Read/Write mode and waits for SSH to return.
+1. Checks running and configured state of OverlayFS and Boot Write Protection.
+2. Switches overlay to Read/Write (`raspi-config nonint do_overlayfs 1`) and reboots into RW mode.
+3. Remounts `/boot/firmware` (or `/boot`) as Read/Write and verifies writable access.
 4. Runs OS updates (`apt update && apt full-upgrade -y && apt autoremove`).
-5. Switches overlay back to Read-Only (`raspi-config nonint do_overlayfs 0`).
-6. Reboots back into Read-Only mode and verifies safe RO status.
+5. Re-enables boot write protection in `/etc/fstab` and remounts boot partition as Read-Only.
+6. Switches overlay back to Read-Only (`raspi-config nonint do_overlayfs 0`).
+7. Reboots back into Read-Only mode and verifies both overlay and boot protection are active.
+
+### 4. PiKVM Maintenance Only (`pikvm_upgrade.yml`)
+Automates the maintenance cycle for `192.168.4.66` (Arch Linux ARM):
+1. Detects initial mount status of `/` and `/boot` via `findmnt`.
+2. Checks system load average against `load_threshold`.
+3. Runs official `/usr/bin/pikvm-update --no-reboot` (updates packages, cleans pacman cache, checks `kvmd -m` integrity).
+4. If updates applied (exit code 100), reboots node to restore clean Read-Only mode. If already up-to-date (exit code 0), ensures read-only lock via `/usr/bin/ro`.
+5. Verifies `/` and `/boot` are mounted `ro` and `kvmd -m` configuration remains valid.
 
 ---
 
@@ -50,7 +76,7 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh ping
 ```
 
-### 2. Upgrade ALL 5 Servers Concurrently (Recommended)
+### 2. Upgrade ALL 6 Servers Concurrently (Recommended)
 ```bash
 ./run.sh upgrade-all -K
 ```
@@ -65,38 +91,43 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh upgrade-ro -K
 ```
 
-### 5. Dry Run (Simulate Changes Without Installing)
+### 5. PiKVM Upgrade Only
+```bash
+./run.sh upgrade-pikvm  # Note: -K (sudo) is not needed; connects directly as root
+```
+
+### 6. Dry Run (Simulate Changes Without Installing)
 ```bash
 ./run.sh upgrade-all --check -K
 ```
 
-### 6. Update Docker Containers Only (Zero Downtime Pull)
+### 7. Update Docker Containers Only (Zero Downtime Pull)
 ```bash
 ./run.sh upgrade --tags docker
 ```
 
-### 7. OS Package Updates Only
+### 8. OS Package Updates Only
 ```bash
 ./run.sh upgrade --tags os -K
 ```
 
-### 8. Backup Only
+### 9. Backup Only
 ```bash
 ./run.sh backup -K
 ```
 
-### 9. Disk Space Maintenance & Cleanup
+### 10. Disk Space Maintenance & Cleanup
 ```bash
 ./run.sh cleanup -K                      # Clean disk space across all standard servers
 ./run.sh cleanup --limit 192.168.4.18 -K # Clean disk space on a specific host
 ```
 
-### 10. Target a Single Server
+### 11. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 11. Run Arbitrary Ad-hoc Commands
+### 12. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -116,6 +147,7 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── cleanup.yml            # Disk space cleanup & maintenance playbook
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
+├── pikvm_upgrade.yml      # PiKVM automated maintenance & reboot cycle
 ├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)
 ├── tasks/
 │   └── restart_docker_stack.yml # Modular stack restart with load check
