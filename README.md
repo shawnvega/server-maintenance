@@ -186,3 +186,25 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── run.sh                 # Convenience CLI wrapper
 └── .venv/                 # Local Python virtual environment (gitignored)
 ```
+
+## Managing Docker Compose & Secrets
+
+Docker compose files for the various stacks on your standard servers are kept locally in the `compose/` directory.
+
+When running `./run.sh upgrade --tags docker` (or the full upgrade), Ansible will:
+1. Sync the static `compose.yml` or `docker-compose.yml` files directly to the server.
+2. Dynamically template `.env.j2` files and inject your secrets directly into an `.env` file on the server.
+
+### How to Change the Ansible Vault Password
+
+Sensitive passwords (like database passwords for Immich or WordPress) are stored in `group_vars/all/vault.yml`, which is encrypted via `ansible-vault`. The vault password is automatically read from `.vault_pass` (which is gitignored).
+
+To securely change the vault password without breaking the vault, follow these exact steps:
+
+1. **Verify your old password is ready**: Ensure `.vault_pass` currently contains your **old** password.
+2. **Force the interactive prompt**: Run the following command. It will seamlessly decrypt the vault using your old password, and then prompt you for a new one:
+   ```bash
+   .venv/bin/ansible-vault rekey --new-vault-id prompt group_vars/all/vault.yml
+   ```
+3. Type your **New Vault password** and confirm it when prompted.
+4. **Update the password file**: Once it says "Rekey successful", open `.vault_pass` and replace the old password with your new one. Future Ansible runs will now automatically use the new password.

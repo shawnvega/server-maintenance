@@ -1,0 +1,27 @@
+services:
+    wyze-bridge:
+        container_name: wyze-bridge
+        restart: unless-stopped
+        image: mrlt8/wyze-bridge:latest
+        ports:
+            - 1935:1935 # RTMP
+            - 9554:8554 # RTSP
+            - 8888:8888 # HLS
+            - 8889:8889 #WebRTC
+            - 8189:8189/udp # WebRTC/ICE
+            - 5050:5000 # WEB-UI
+        environment:
+            # [OPTIONAL] Credentials can be set in the WebUI
+            # API Key and ID can be obtained from the wyze dev portal: 
+            # https://developer-api-console.wyze.com/#/apikey/view
+            - WYZE_EMAIL=shawnsvega@gmail.com
+            - WYZE_PASSWORD=Wasv1985** 
+            - API_ID=be224e01-1ed2-42f5-995f-6d11d1863ec2
+            - API_KEY=29gi8GCqCNohoWXhLKMDItqyGQAqYVGbK3e5YRx4XNEOOjzUV0TIKeEPpXmW 
+            # [OPTIONAL] IP Address of the host to enable WebRTC e.g.,:
+            - WB_IP=192.168.4.19
+            # WebUI and Stream authentication:
+            - WB_AUTH=false # Set to false to disable web and stream auth.
+            # WB_USERNAME=
+            # WB_PASSWORD=
+

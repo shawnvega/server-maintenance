@@ -1,0 +1,52 @@
+services:
+  db:
+    # We use a mariadb image which supports both amd64 & arm64 architecture
+    image: mariadb:10.6.4-focal
+    # If you really want to use MySQL, uncomment the following line
+    #image: mysql:8.0.27
+    command: '--default-authentication-plugin=mysql_native_password'
+    volumes:
+      - /srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2/wordpress/wwwvvvega/mysql:/var/lib/mysql
+    env_file:
+      - .env
+    restart: no
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    expose:
+      - 3306
+      - 33060
+  wordpress:
+    image: wordpress:latest
+    volumes:
+      - /srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2/wordpress/wwwvvvega/html:/var/www/html
+    env_file:
+      - .env
+    ports:
+      - 9999:80
+    restart: no
+    environment:
+      - WORDPRESS_DB_HOST=db
+      - WORDPRESS_DB_USER=${MYSQL_USER}
+      - WORDPRESS_DB_PASSWORD=${MYSQL_PASSWORD}
+      - WORDPRESS_DB_NAME=${MYSQL_DATABASE}
+
+volumes:
+  db_data:
+    #external: true
+    driver: local
+    #name: '/srv/dev-disk-by-uuid-c1c2d4dd-bc6b-4f1f-88dd-e4c8b48d2c3a/wordpress/wwwvvvega/mysql'
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: /srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2/wordpress/wwwvvvega/mysql
+
+  wp_data:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: /srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2/wordpress/wwwvvvega/html
+

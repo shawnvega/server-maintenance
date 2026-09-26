@@ -1,0 +1,19 @@
+---
+services:
+  syncthing:
+    image: syncthing/syncthing
+    container_name: syncthing
+    hostname: omv-syncthing
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2/syncthing:/var/syncthing
+    network_mode: host
+    restart: always
+    healthcheck:
+      test: curl -fkLsS -m 2 127.0.0.1:8384/rest/noauth/health | grep -o --color=never OK || exit 1
+      interval: 1m
+      timeout: 10s
+      retries: 3
+

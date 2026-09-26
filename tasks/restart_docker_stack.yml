@@ -16,6 +16,33 @@
   ansible.builtin.debug:
     msg: "Current 1-min load is {{ docker_stack_load.stdout | trim }} (threshold: {{ load_threshold | default(4.0) }}). Proceeding with {{ stack_item }}."
 
+- name: "Ensure stack directory exists for {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}"
+    state: directory
+    mode: '0755'
+
+- name: "Sync static compose files for {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}/{{ item | basename }}"
+    mode: '0644'
+  with_fileglob:
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/docker-compose.yml"
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/docker-compose.yaml"
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yml"
+
+- name: "Template .env file for {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}/.env"
+    mode: '0600'
+  with_fileglob:
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/.env.j2"
+
 - name: "Recreate and restart {{ stack_item }} (~2s downtime)"
   tags: [docker]
   ansible.builtin.command:
