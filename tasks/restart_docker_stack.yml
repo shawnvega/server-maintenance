@@ -33,6 +33,7 @@
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/docker-compose.yml"
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/docker-compose.yaml"
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yml"
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yaml"
 
 - name: "Template .env file for {{ stack_item }}"
   tags: [docker]
