@@ -1,0 +1,306 @@
+---
+# Playbook: Migrate /var to a 3-Device Btrfs RAID 1 Pool (Split Storage - Option 2)
+# Target: 192.168.4.18 (Internal eMMC for / + External SD/microSD/USB Btrfs RAID 1 for /var)
+# Usage: ./run.sh migrate-var -K
+
+- name: Migrate /var to Btrfs RAID 1 External Storage Pool
+  hosts: "{{ target_hosts | default('192.168.4.18') }}"
+  gather_facts: true
+  vars:
+    btrfs_label: "var_raid1"
+    btrfs_mount_opts: "defaults,compress=zstd:3,noatime,nofail,x-systemd.device-timeout=30s"
+    btrfs_var_devices:
+      - /dev/sda
+      - /dev/sdb
+      - /dev/sdc
+    reclaim_emmc_var: true
+
+  tasks:
+    # =========================================================================
+    # STAGES 1-4: Elevated Storage & System Migration Tasks (become: true)
+    # Note: Play-level become is intentionally false so gather_facts and Stage 5
+    # VLC restart execute as {{ ansible_user }} (VLC refuses to run as root).
+    # =========================================================================
+    - name: Run privileged Btrfs RAID 1 formatting and /var migration
+      become: true
+      block:
+        # ---------------------------------------------------------------------
+        # STAGE 1: Pre-flight Checks & Dependency Installation
+        # ---------------------------------------------------------------------
+        - name: Check current /var mount status
+          ansible.builtin.command: findmnt -n -o FSTYPE,SOURCE /var
+          register: current_var_mount
+          failed_when: false
+          changed_when: false
+          tags: [preflight, verify]
+
+        - name: Determine if /var is already on Btrfs
+          ansible.builtin.set_fact:
+            var_already_btrfs: "{{ 'btrfs' in (current_var_mount.stdout | default('')) }}"
+          tags: [preflight, verify]
+
+        - name: Display current /var status
+          ansible.builtin.debug:
+            msg: >-
+              Current /var mount: {{ current_var_mount.stdout | default('unmounted (on rootfs)') }}
+              (Already Btrfs: {{ var_already_btrfs }})
+          tags: [preflight, verify]
+
+        - name: Verify root device is /dev/mmcblk1 and all target devices are present and writable (RO=0)
+          ansible.builtin.shell: |
+            set -euo pipefail
+            rm -f /etc/modprobe.d/sdhci-wp.conf
+            ROOT_SRC=$(findmnt -n -o SOURCE /)
+            for dev in {{ btrfs_var_devices | join(' ') }}; do
+              if [[ "$ROOT_SRC" == "$dev"* ]]; then
+                echo "SAFETY HALT: Root filesystem ($ROOT_SRC) is on target device $dev!"
+                exit 1
+              fi
+              if [[ ! -b "$dev" ]]; then
+                echo "MISSING DEVICE: Block device $dev is not present!"
+                exit 1
+              fi
+              RO_VAL=$(cat "/sys/block/$(basename "$dev")/ro")
+              if [[ "$RO_VAL" != "0" ]]; then
+                echo "READ-ONLY DEVICE: $dev reports RO=$RO_VAL!"
+                exit 1
+              fi
+            done
+          args:
+            executable: /bin/bash
+          changed_when: false
+          when: not var_already_btrfs
+          tags: [preflight]
+
+        - name: Ensure btrfs-progs, rsync, and parted (partprobe) are installed
+          ansible.builtin.apt:
+            name:
+              - btrfs-progs
+              - rsync
+              - parted
+            state: present
+            update_cache: true
+          when: not var_already_btrfs
+          tags: [preflight]
+
+        # ---------------------------------------------------------------------
+        # STAGE 2: Wipe Target Drives & Format Btrfs RAID 1 (if not already formatted)
+        # ---------------------------------------------------------------------
+        - name: Check if Btrfs RAID 1 pool ({{ btrfs_label }}) is already formatted
+          ansible.builtin.command: blkid -L {{ btrfs_label }}
+          register: existing_btrfs_pool
+          failed_when: false
+          changed_when: false
+          when: not var_already_btrfs
+          tags: [format, migrate]
+
+        - name: Stop udisks2 automounter, unmount target partitions, and wipe all signatures
+          ansible.builtin.shell: |
+            set -euo pipefail
+            systemctl stop udisks2.service 2>/dev/null || true
+            for dev in {{ btrfs_var_devices | join(' ') }}; do
+              for part in $(lsblk -ln -o NAME "$dev" | tail -n +2 || true); do
+                umount -l "/dev/$part" 2>/dev/null || true
+                wipefs -a "/dev/$part" 2>/dev/null || true
+              done
+              umount -l "$dev" 2>/dev/null || true
+              wipefs -a "$dev"
+              partprobe "$dev" 2>/dev/null || true
+            done
+            udevadm settle
+          args:
+            executable: /bin/bash
+          when:
+            - not var_already_btrfs
+            - existing_btrfs_pool.rc != 0
+          tags: [format]
+
+        - name: Create Btrfs RAID 1 filesystem (data=raid1, metadata=raid1) across target devices
+          ansible.builtin.command: >
+            mkfs.btrfs -f -L {{ btrfs_label }}
+            -d raid1 -m raid1
+            {{ btrfs_var_devices | join(' ') }}
+          when:
+            - not var_already_btrfs
+            - existing_btrfs_pool.rc != 0
+          tags: [format]
+
+        - name: Scan Btrfs devices
+          ansible.builtin.command: btrfs device scan
+          changed_when: false
+          tags: [format, migrate, verify]
+
+        - name: Read Btrfs filesystem UUID from first device
+          ansible.builtin.command: blkid -s UUID -o value {{ btrfs_var_devices[0] }}
+          register: btrfs_uuid_out
+          changed_when: false
+          tags: [format, migrate, verify]
+
+        # ---------------------------------------------------------------------
+        # STAGE 3: Sync /var to Btrfs RAID 1 & Configure /etc/fstab
+        # ---------------------------------------------------------------------
+        - name: Create temporary mount directory /mnt/new_var
+          ansible.builtin.file:
+            path: /mnt/new_var
+            state: directory
+            mode: "0755"
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Mount Btrfs RAID 1 pool temporarily at /mnt/new_var
+          ansible.builtin.command: >
+            mount -o compress=zstd:3,noatime UUID={{ btrfs_uuid_out.stdout | trim }} /mnt/new_var
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Perform initial hot rsync of /var to /mnt/new_var (tolerating vanished temp files rc=24)
+          ansible.builtin.command: >
+            rsync -aAX --delete
+            /var/ /mnt/new_var/
+          register: rsync_hot_out
+          failed_when: rsync_hot_out.rc not in [0, 24]
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Flush journals and stop active services writing to /var for clean cutover sync
+          ansible.builtin.shell: |
+            pkill -9 -x vlc || true
+            systemctl stop snapd.service snapd.socket snapd.seeded.service 2>/dev/null || true
+            systemctl stop docker.service docker.socket containerd.service 2>/dev/null || true
+            systemctl stop rsyslog.service syslog.socket 2>/dev/null || true
+            journalctl --flush --sync 2>/dev/null || true
+            systemctl stop systemd-journald.service systemd-journald.socket systemd-journald-dev-log.socket systemd-journald-audit.socket 2>/dev/null || true
+          changed_when: true
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Perform final delta rsync of /var to /mnt/new_var
+          ansible.builtin.command: >
+            rsync -aAX --delete
+            /var/ /mnt/new_var/
+          register: rsync_final_out
+          failed_when: rsync_final_out.rc not in [0, 24]
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Unmount temporary /mnt/new_var staging mount
+          ansible.builtin.command: umount /mnt/new_var
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Remove temporary mount directory /mnt/new_var
+          ansible.builtin.file:
+            path: /mnt/new_var
+            state: absent
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Remove stale non-existent Btrfs /srv entry from /etc/fstab if present
+          ansible.builtin.lineinfile:
+            path: /etc/fstab
+            regexp: '67e597dd-6061-415d-8a37-2246eabee10a'
+            state: absent
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Configure /var Btrfs RAID 1 mount in /etc/fstab
+          ansible.posix.mount:
+            path: /var
+            src: "UUID={{ btrfs_uuid_out.stdout | trim }}"
+            fstype: btrfs
+            opts: "{{ btrfs_mount_opts }}"
+            dump: "0"
+            passno: "0"
+            state: present
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Update initramfs so Btrfs multi-device scan runs at early boot
+          ansible.builtin.command: update-initramfs -u
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        # ---------------------------------------------------------------------
+        # STAGE 4: Reboot into Btrfs /var & Reclaim Shadowed Internal eMMC Space
+        # ---------------------------------------------------------------------
+        - name: Reboot host to cleanly mount Btrfs RAID 1 on /var before services start
+          ansible.builtin.reboot:
+            msg: "Rebooting to activate Btrfs RAID 1 /var mount"
+            reboot_timeout: 300
+          when: not var_already_btrfs
+          tags: [migrate]
+
+        - name: Verify /var is mounted on Btrfs after reboot
+          ansible.builtin.command: findmnt -n -o FSTYPE /var
+          register: post_reboot_var_fstype
+          changed_when: false
+          tags: [verify]
+
+        - name: Assert /var is running on Btrfs before reclaiming internal eMMC space
+          ansible.builtin.assert:
+            that:
+              - "'btrfs' in post_reboot_var_fstype.stdout"
+            fail_msg: "CRITICAL: /var is NOT mounted on Btrfs ({{ post_reboot_var_fstype.stdout }}). Internal eMMC /var left untouched!"
+            success_msg: "Confirmed /var is mounted on Btrfs RAID 1."
+          tags: [verify]
+
+        - name: Reclaim shadowed /var space on underlying internal eMMC (/dev/mmcblk1p2)
+          ansible.builtin.shell: |
+            set -euo pipefail
+            mkdir -p /mnt/emmc_root
+            mount /dev/mmcblk1p2 /mnt/emmc_root
+            trap 'umount /mnt/emmc_root || true; rmdir /mnt/emmc_root || true' EXIT
+            TARGET_FS=$(findmnt -n -o FSTYPE -T /mnt/emmc_root/var)
+            if [[ "$TARGET_FS" != "ext4" ]]; then
+              echo "SAFETY HALT: /mnt/emmc_root/var is backed by '$TARGET_FS' instead of 'ext4'!"
+              exit 1
+            fi
+            # Delete shadowed files inside underlying eMMC /var while keeping skeleton dirs & symlinks for fallback
+            find /mnt/emmc_root/var -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            mkdir -p /mnt/emmc_root/var/{log,cache,tmp,lib}
+            ln -sfn /run /mnt/emmc_root/var/run
+            ln -sfn /run/lock /mnt/emmc_root/var/lock
+            chmod 1777 /mnt/emmc_root/var/tmp
+          args:
+            executable: /bin/bash
+          when: reclaim_emmc_var | bool
+          tags: [reclaim]
+
+        # ---------------------------------------------------------------------
+        # STAGE 5a: Verify Btrfs RAID 1 Health & Docker Service
+        # ---------------------------------------------------------------------
+        - name: Ensure Docker service is active after reboot
+          ansible.builtin.systemd:
+            name: docker
+            state: started
+            enabled: true
+          tags: [verify]
+
+        - name: Check Btrfs RAID 1 filesystem usage and device error stats
+          ansible.builtin.shell: |
+            echo "=== Disk Free (/ and /var) ==="
+            df -h / /var
+            echo ""
+            echo "=== Btrfs RAID 1 Usage ==="
+            btrfs filesystem usage -T /var
+            echo ""
+            echo "=== Btrfs Device Health Stats ==="
+            btrfs device stats /var
+          args:
+            executable: /bin/bash
+          register: btrfs_health_report
+          changed_when: false
+          tags: [verify]
+
+        - name: Display Btrfs RAID 1 & eMMC Storage Summary
+          ansible.builtin.debug:
+            msg: "{{ btrfs_health_report.stdout_lines }}"
+          tags: [verify]
+
+    # =========================================================================
+    # STAGE 5b: Restart VLC Stream as Non-Root User ({{ ansible_user }})
+    # =========================================================================
+    - name: Ensure VLC video stream is running after migration (as non-root user)
+      ansible.builtin.include_tasks: tasks/restart_vlc_stream.yml
+      when: vlc_stream_url is defined and vlc_stream_url | length > 0
+      tags: [verify, vlc]

@@ -50,9 +50,29 @@
         cmd: "journalctl --vacuum-size=100M"
       changed_when: false
 
+    - name: Remove compressed and rotated /var/log archives and restart rsyslog
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          truncate -s 0 /var/log/syslog.1 /var/log/kern.log.1 /var/log/dmesg 2>/dev/null || true
+          rm -f /var/log/*.gz /var/log/*.[2-9] 2>/dev/null || true
+          if systemctl is-active --quiet rsyslog; then
+            systemctl restart rsyslog
+          fi
+      changed_when: false
+
     # -------------------------------------------------------------
     # 3. APT / DNF Package Cache Cleanup
     # -------------------------------------------------------------
+    - name: Heal any interrupted dpkg state before APT cleanup
+      when: ansible_facts['os_family'] == 'Debian'
+      become: true
+      ansible.builtin.command:
+        cmd: "dpkg --configure -a"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      changed_when: false
+
     - name: Clean APT package cache and partial downloads
       when: ansible_facts['os_family'] == 'Debian'
       become: true
@@ -71,9 +91,9 @@
       changed_when: false
 
     # -------------------------------------------------------------
-    # 4. Snap Package Cleanup (Remove disabled revisions)
+    # 4. Snap Package Cleanup (Remove disabled revisions & cache)
     # -------------------------------------------------------------
-    - name: Remove disabled snap package revisions
+    - name: Remove disabled snap package revisions and snapd cache
       when: ansible_facts['os_family'] == 'Debian'
       become: true
       ansible.builtin.shell:
@@ -83,11 +103,12 @@
             snap list --all | awk '/disabled/{print $1, $3}' | while read -r snapname revision; do
               snap remove "$snapname" --revision="$revision"
             done
+            rm -rf /var/lib/snapd/cache/*
           fi
       changed_when: false
 
     # -------------------------------------------------------------
-    # 5. Docker Cleanup (Dangling & Unused Images / Containers)
+    # 5. Docker & Containerd Cleanup (Dangling Images & Orphaned Snapshots)
     # -------------------------------------------------------------
     - name: Prune dangling and unused Docker images
       when:
@@ -97,6 +118,24 @@
         cmd: "docker image prune -a -f"
       register: docker_prune_out
       changed_when: "'Deleted Images:' in docker_prune_out.stdout"
+      failed_when: false
+
+    - name: Remove orphaned active containerd moby snapshots
+      when:
+        - docker_stacks is defined
+        - (docker_stacks | length) > 0
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          if command -v ctr >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+            active_cids=$(docker ps -a --no-trunc -q)
+            ctr -n moby snapshots ls | awk '$3 == "Active" {print $1}' | while read -r snap_id; do
+              if [ -n "$snap_id" ] && ! echo "$active_cids" | grep -qx "$snap_id"; then
+                ctr -n moby snapshots rm "$snap_id" "${snap_id}-init" 2>/dev/null || true
+              fi
+            done
+          fi
+      changed_when: false
       failed_when: false
 
     # -------------------------------------------------------------

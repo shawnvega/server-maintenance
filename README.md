@@ -8,7 +8,7 @@ Ansible automation for managing home servers natively (load monitoring, rpi-clon
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich-ml` | Read/Write |
-| `192.168.4.18` | `shawn` | Debian / Ubuntu | None | `glances`, persistent VLC stream (`snap` vlc) | Read/Write |
+| `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | `glances`, persistent VLC stream (`snap` vlc) | Read/Write (`/` on eMMC, `/var` on 3-drive Btrfs RAID 1) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | `glances0`, `frigate0` | Read/Write |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink` | **Read-Only (OverlayFS & Boot Protection)** |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | PiKVM (`kvmd`) | **Read-Only (Native ext4/vfat ro)** |
@@ -98,7 +98,17 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh upgrade-pikvm  # Note: -K (sudo) is not needed; connects directly as root
 ```
 
-### 6. Dry Run (Simulate Changes Without Installing)
+### 6. Local Mac Workstation Upgrade (Homebrew, Apps, OS)
+```bash
+./run.sh upgrade-mac                     # Upgrade Homebrew formulae & casks, npm, gh, MAS, check macOS
+./run.sh upgrade-mac -n                  # Dry-run: preview pending updates
+./run.sh upgrade-mac --all               # Full upgrade including unattended macOS system updates
+# Or invoke directly:
+./upgrade_mac.sh
+```
+> **Note on sudo & passwords**: The local Mac workstation uses its own local administrator password / Touch ID, completely independent of the remote servers' Ansible sudo password (`-K`). Homebrew operations run strictly unprivileged without `sudo`. Elevation is only requested directly by the local terminal if installing Apple system software updates or privileged cask packages.
+
+### 7. Dry Run Remote Servers (Simulate Changes Without Installing)
 ```bash
 ./run.sh upgrade-all --check -K
 ```
@@ -136,12 +146,17 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh cleanup --limit 192.168.4.18 -K # Clean disk space on a specific host
 ```
 
-### 13. Target a Single Server
+### 13. Migrate / Verify `/var` on Btrfs RAID 1 (`192.168.4.18`)
+```bash
+./run.sh migrate-var -K                  # Format 3-drive Btrfs RAID 1, migrate /var, and reclaim eMMC space
+```
+
+### 14. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 14. Run Arbitrary Ad-hoc Commands
+### 15. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -159,6 +174,7 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── ping.yml               # Connectivity check playbook
 ├── backup.yml             # Dedicated backup playbook
 ├── cleanup.yml            # Disk space cleanup & maintenance playbook
+├── migrate_var_btrfs.yml  # Btrfs RAID 1 /var migration & eMMC reclamation playbook (192.168.4.18)
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
 ├── pikvm_upgrade.yml      # PiKVM automated maintenance & reboot cycle

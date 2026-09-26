@@ -8,12 +8,13 @@ This repository manages automation and configuration for self-hosted home server
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml` |
-| `192.168.4.18` | `shawn` | Debian / Ubuntu | None | Read/Write | `glances`, persistent VLC stream (`snap` vlc) |
+| `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0` |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
 
-#### Read-Only Appliance Architectural Differences
+#### Appliance & Storage Architectural Differences
+* **Split-Storage Btrfs RAID 1 Chromebook (`192.168.4.18`)**: Keeps `/boot/efi`, `/` (`/usr`, `/etc`, `/home`), and `/swapfile` on fast internal eMMC (`/dev/mmcblk1`), `/tmp` on `tmpfs` (RAM), and mounts `/var` (`compress=zstd:3,noatime,nofail`) on a 3-device Btrfs RAID 1 (`-d raid1 -m raid1`) pool across `/dev/sda` (7.6 GB USB microSD reader), `/dev/sdb` (7.5 GB USB thumb drive), and `/dev/sdc` (59.5 GB SD card). Automated via `migrate_var_btrfs.yml` (`./run.sh migrate-var -K`).
 * **OverlayFS Pi (`192.168.4.11`)**: Uses kernel OverlayFS (writes redirected to RAM tmpfs) + `/etc/fstab` boot write protection. Controlled via `raspi-config nonint do_overlayfs 0|1`. Requires disabling overlay and rebooting into RW mode to apply `apt` updates, followed by re-enabling overlay and rebooting back into RO mode.
 * **Native PiKVM (`192.168.4.66`)**: Uses direct native read-only filesystem mounts (`/` ext4 and `/boot` vfat mounted `ro` via kernel cmdline and `/etc/fstab`). Uses `/usr/bin/rw` and `/usr/bin/ro` remount scripts. Upgraded via official `/usr/bin/pikvm-update --no-reboot` which tests `kvmd -m` integrity. A reboot safely returns `/` and `/boot` to read-only mode if updates were applied.
 
@@ -79,7 +80,15 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 
 # PiKVM server maintenance cycle only (192.168.4.66)
 ./run.sh upgrade-pikvm                    # No -K needed (authenticates as root)
+
+# Local Mac workstation upgrade cycle (Homebrew, casks, npm, gh, apps, check macOS)
+./run.sh upgrade-mac                     # Local Mac upgrade (no -K needed; uses local sudo/Touch ID if needed)
+./run.sh upgrade-mac -n                  # Dry run preview of pending updates
+./run.sh upgrade-mac --all               # Full upgrade including macOS system updates
 ```
+
+> **Note on sudo & passwords**: The local Mac workstation has its own administrator password (or Touch ID), completely separate from the remote servers' shared sudo password (`-K`). Homebrew operations run strictly as the local user without `sudo`. Sudo is only requested directly in the local terminal if installing Apple system software updates or privileged cask packages.
+
 
 ### Selective Execution via Tags
 ```bash
@@ -98,13 +107,16 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ./run.sh backup -K
 ```
 
-### Disk Space Maintenance & Cleanup
+### Disk Space Maintenance, Cleanup & Storage Migration
 ```bash
 # Reclaim disk space across all standard servers (journal vacuum, apt clean, docker prune)
 ./run.sh cleanup -K
 
 # Clean disk space on a single host
 ./run.sh cleanup --limit 192.168.4.18 -K
+
+# Format 3-device Btrfs RAID 1 (/dev/sda, /dev/sdb, /dev/sdc), migrate /var, & reclaim eMMC on 192.168.4.18
+./run.sh migrate-var -K
 ```
 
 ### Ad-hoc Shell Execution
@@ -138,6 +150,16 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
   ./run.sh raw 'lsblk'
   ```
 * Verify the target device specified in `inventory.ini` matches the current block device.
+
+### Btrfs RAID 1 `/var` Health or Device Replacement (`192.168.4.18`)
+* To inspect `/var` Btrfs RAID 1 mirror allocation and error counters:
+  ```bash
+  ssh shawn@192.168.4.18 'sudo btrfs filesystem usage -T /var && sudo btrfs device stats /var'
+  ```
+* If one of the 3 external drives (`/dev/sda`, `/dev/sdb`, or `/dev/sdc`) is replaced with a new or larger drive:
+  ```bash
+  ssh shawn@192.168.4.18 'sudo btrfs replace start <old_dev_or_id> <new_dev> /var'
+  ```
 
 ### Read-Only Overlay Pi Fails to Return to Read-Only (`192.168.4.11`)
 * If `readonly_upgrade.yml` fails, check current status manually:
@@ -176,6 +198,7 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `upgrade_all.yml`: Master concurrent upgrade playbook for all 6 servers.
 * `upgrade.yml`: Native multi-stage upgrade playbook for standard servers.
 * `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
+* `migrate_var_btrfs.yml`: Automated playbook to format a 3-device Btrfs RAID 1 pool (`/dev/sda`, `/dev/sdb`, `/dev/sdc`), migrate `/var`, and reclaim internal eMMC space on `192.168.4.18`.
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `pikvm_upgrade.yml`: Automated maintenance playbook for Arch Linux ARM read-only PiKVM server.
 * `backup.yml`: Dedicated playbook for `rpi-clone` backups.
