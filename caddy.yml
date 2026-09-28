@@ -1,0 +1,21 @@
+---
+- name: Manage Caddy reverse proxy on Raspberry Pi 5
+  hosts: 192.168.4.5
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Ensure Caddy package is installed
+      ansible.builtin.apt:
+        name: caddy
+        state: present
+        update_cache: false
+
+    - name: Configure Caddy reverse proxy
+      ansible.builtin.include_tasks: tasks/deploy_caddy.yml
+
+  handlers:
+    - name: Reload Caddy
+      ansible.builtin.systemd:
+        name: caddy
+        state: reloaded

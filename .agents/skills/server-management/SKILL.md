@@ -99,7 +99,20 @@ Run hardware block backups or data share synchronizations:
 ./run.sh backup-data -K
 ```
 
-### E. Ad-hoc Diagnostics and Cluster Inspection
+### F. Btrfs Filesystem Health & Device Inspection
+Inspect Btrfs storage pools, device I/O error stats, scrub status, balance status, and disk allocation:
+```bash
+# Check Btrfs health on primary storage servers (192.168.4.4 & 192.168.4.5)
+./run.sh check-btrfs
+
+# Check Btrfs health on a specific server (e.g., 192.168.4.18 Btrfs RAID 1 /var)
+./run.sh check-btrfs --limit 192.168.4.18
+
+# Check across all Btrfs-equipped hosts (192.168.4.4, .5, .18, .19)
+./run.sh check-btrfs -e target_hosts=btrfs_servers
+```
+
+### G. Ad-hoc Diagnostics and Cluster Inspection
 Execute commands across all nodes or targeted servers:
 ```bash
 ./run.sh raw 'uptime'

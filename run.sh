@@ -18,8 +18,10 @@ usage() {
   echo "  upgrade-all          Run concurrent upgrades across ALL servers (standard + read-only Pi + PiKVM)"
   echo "  upgrade-mac          Run upgrade on local Mac (Homebrew formulae & casks, npm, gh, MAS, macOS)"
   echo "  cleanup              Reclaim disk space (journal vacuum, apt cache, docker prune)"
+  echo "  check-btrfs          Inspect Btrfs filesystem health, device errors, scrub & balance"
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
+  echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
@@ -29,8 +31,11 @@ usage() {
   echo "  $0 backup-data -K                  # Run data and Immich backup (192.168.4.4 -> Pi 5)"
   echo "  $0 cleanup -K                      # Clean disk space across standard servers"
   echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
+  echo "  $0 check-btrfs                     # Check Btrfs health on storage servers (192.168.4.4 & .5)"
+  echo "  $0 check-btrfs --limit 192.168.4.18 # Check Btrfs health on specific host"
   echo "  $0 migrate-var -K                  # Migrate /var to Btrfs RAID 1 on 192.168.4.18"
   echo "  $0 restart-vlc                     # Restart VLC stream on 192.168.4.18"
+  echo "  $0 caddy                           # Deploy & validate Caddy reverse proxy on Pi 5"
   echo "  $0 upgrade -K                      # Standard servers: backup -> OS/Snap -> Docker -> VLC"
   echo "  $0 upgrade-ro -K                   # Read-only Pi (192.168.4.11) upgrade cycle"
   echo "  $0 upgrade-pikvm                   # PiKVM (192.168.4.66) upgrade cycle"
@@ -112,11 +117,21 @@ case "${CMD}" in
   cleanup)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/cleanup.yml" "$@"
     ;;
+  check-btrfs|btrfs-check|btrfs)
+    if [[ " $* " == *" --limit "* ]]; then
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_check.yml" -e "target_hosts=servers" "$@"
+    else
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_check.yml" "$@"
+    fi
+    ;;
   migrate-var)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/migrate_var_btrfs.yml" "$@"
     ;;
   restart-vlc)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 -e "force_vlc_restart=true" "$@"
+    ;;
+  caddy|proxy)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/caddy.yml" "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK[@]}" "$@"

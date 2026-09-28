@@ -1,0 +1,20 @@
+---
+- name: Deploy Caddyfile configuration
+  tags: [caddy, proxy]
+  become: true
+  ansible.builtin.copy:
+    src: files/caddy/Caddyfile
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'caddy validate --adapter caddyfile --config %s'
+  notify: Reload Caddy
+
+- name: Ensure Caddy service is running and enabled
+  tags: [caddy, proxy]
+  become: true
+  ansible.builtin.systemd:
+    name: caddy
+    state: started
+    enabled: true

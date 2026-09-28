@@ -7,7 +7,7 @@ Ansible automation for managing home servers natively (load monitoring, rpi-clon
 | Host | User | OS | Backup Method | Containers / Workloads | Mode |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich-ml` | Read/Write |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich-ml`, `semaphore`, native Caddy | Read/Write |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | `glances`, persistent VLC stream (`snap` vlc) | Read/Write (`/` on eMMC, `/var` on 3-drive Btrfs RAID 1) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | `glances0`, `frigate0` | Read/Write |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink` | **Read-Only (OverlayFS & Boot Protection)** |
@@ -135,28 +135,42 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh upgrade --tags vlc
 ```
 
-### 11. Backup Only
+### 11. Caddy Reverse Proxy (192.168.4.5)
+```bash
+./run.sh caddy                           # Validate and deploy Caddyfile with zero-downtime reload
+# Or via tags during upgrade:
+./run.sh upgrade --tags caddy
+```
+
+### 12. Backup Only
 ```bash
 ./run.sh backup -K
 ```
 
-### 12. Disk Space Maintenance & Cleanup
+### 13. Disk Space Maintenance & Cleanup
 ```bash
 ./run.sh cleanup -K                      # Clean disk space across all standard servers
 ./run.sh cleanup --limit 192.168.4.18 -K # Clean disk space on a specific host
 ```
 
-### 13. Migrate / Verify `/var` on Btrfs RAID 1 (`192.168.4.18`)
+### 14. Migrate / Verify `/var` on Btrfs RAID 1 (`192.168.4.18`)
 ```bash
 ./run.sh migrate-var -K                  # Format 3-drive Btrfs RAID 1, migrate /var, and reclaim eMMC space
 ```
 
-### 14. Target a Single Server
+### 15. Btrfs Filesystem Health & Device Checks
+```bash
+./run.sh check-btrfs                     # Check Btrfs health on storage servers (192.168.4.4 & 192.168.4.5)
+./run.sh check-btrfs --limit 192.168.4.18 # Check Btrfs on specific host
+./run.sh check-btrfs -e target_hosts=btrfs_servers # Check across all Btrfs hosts
+```
+
+### 16. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 15. Run Arbitrary Ad-hoc Commands
+### 17. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -172,14 +186,20 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── ansible.cfg            # Ansible defaults (forks=10, inventory, yaml output, SSH pipelining)
 ├── inventory.ini          # Server definitions, backup devices, and docker stack lists
 ├── ping.yml               # Connectivity check playbook
+├── caddy.yml              # Dedicated playbook for native Caddy reverse proxy (192.168.4.5)
 ├── backup.yml             # Dedicated backup playbook
 ├── cleanup.yml            # Disk space cleanup & maintenance playbook
+├── btrfs_check.yml        # Btrfs filesystem health, device errors & scrub/balance status
 ├── migrate_var_btrfs.yml  # Btrfs RAID 1 /var migration & eMMC reclamation playbook (192.168.4.18)
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
 ├── pikvm_upgrade.yml      # PiKVM automated maintenance & reboot cycle
 ├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)
+├── files/
+│   └── caddy/
+│       └── Caddyfile      # Live reverse proxy routing configuration
 ├── tasks/
+│   ├── deploy_caddy.yml         # Modular Caddy validation and reload task
 │   ├── restart_docker_stack.yml # Modular stack restart with load check
 │   └── restart_vlc_stream.yml   # Modular persistent VLC fullscreen stream restart
 ├── requirements.txt       # Python dependencies

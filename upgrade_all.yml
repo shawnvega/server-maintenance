@@ -142,8 +142,8 @@
         cmd: "awk '{print $1}' /proc/loadavg"
       register: wait_load
       until: (wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
-      retries: 30
-      delay: 30
+      retries: 60
+      delay: 60
       changed_when: false
       check_mode: false
 
@@ -380,6 +380,14 @@
       ansible.builtin.include_tasks: tasks/restart_vlc_stream.yml
 
     # =============================================================
+    # Stage 6: Reverse Proxy (Caddy on Pi 5)
+    # =============================================================
+    - name: "[Standard] Configure Caddy reverse proxy on Pi 5"
+      tags: [caddy, proxy]
+      when: inventory_hostname == '192.168.4.5'
+      ansible.builtin.include_tasks: tasks/deploy_caddy.yml
+
+    # =============================================================
     # Stage RO-2: Read-Only Pi Restore & Final Reboot (192.168.4.11)
     # =============================================================
     - name: "[RO-Pi] Ensure boot write protection is configured in fstab"
@@ -474,8 +482,8 @@
         cmd: "awk '{print $1}' /proc/loadavg"
       register: pikvm_wait_load
       until: (pikvm_wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
-      retries: 30
-      delay: 30
+      retries: 60
+      delay: 60
       changed_when: false
       check_mode: false
 
@@ -542,3 +550,11 @@
       register: pikvm_kvmd_check
       failed_when: pikvm_kvmd_check.rc != 0
       changed_when: false
+
+  handlers:
+    - name: Reload Caddy
+      become: true
+      ansible.builtin.systemd:
+        name: caddy
+        state: reloaded
+

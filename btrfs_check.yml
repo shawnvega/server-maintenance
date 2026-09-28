@@ -1,0 +1,138 @@
+---
+- name: Inspect Btrfs filesystems and verify device health
+  hosts: "{{ target_hosts | default('btrfs_storage_servers') }}"
+  become: true
+  gather_facts: false
+
+  tasks:
+    # -------------------------------------------------------------
+    # 1. Query Btrfs Filesystems, Device Stats, Scrub & Balance Status
+    # -------------------------------------------------------------
+    - name: Query Btrfs filesystem status and health metrics
+      ansible.builtin.shell: |
+        python3 - << 'EOF'
+        import json, subprocess
+
+        def run(cmd):
+            p = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            return p.stdout.strip(), p.stderr.strip(), p.returncode
+
+        findmnt_out, _, _ = run("findmnt --list --all --canonicalize --notruncate --nofsroot --uniq --noheadings --output TARGET,UUID,LABEL --types btrfs")
+        lines = [l.strip() for l in findmnt_out.splitlines() if l.strip()]
+
+        seen_uuids = set()
+        filesystems = []
+
+        for line in lines:
+            parts = line.split()
+            if not parts:
+                continue
+            target = parts[0]
+            uuid = parts[1] if len(parts) > 1 else "unknown"
+            label = parts[2] if len(parts) > 2 else ""
+
+            if uuid in seen_uuids:
+                continue
+            seen_uuids.add(uuid)
+
+            usage, _, _ = run(f"btrfs filesystem usage -T {target}")
+            dev_stats, _, _ = run(f"btrfs device stats {target}")
+            scrub, _, _ = run(f"btrfs scrub status {target}")
+            balance, _, _ = run(f"btrfs balance status {target}")
+
+            errors = []
+            for s in dev_stats.splitlines():
+                s_clean = s.strip()
+                if s_clean and not s_clean.endswith(" 0"):
+                    errors.append(s_clean)
+
+            # Determine scrub state
+            scrub_state = "unknown"
+            if "running" in scrub.lower():
+                scrub_state = "running"
+            elif "finished" in scrub.lower():
+                scrub_state = "finished"
+            elif "no stats available" in scrub.lower() or "never" in scrub.lower():
+                scrub_state = "never run"
+            elif "aborted" in scrub.lower() or "canceled" in scrub.lower():
+                scrub_state = "canceled"
+
+            filesystems.append({
+                "target": target,
+                "uuid": uuid,
+                "label": label or "none",
+                "has_device_errors": len(errors) > 0,
+                "error_count": len(errors),
+                "device_errors": errors,
+                "dev_stats_raw": dev_stats,
+                "scrub_state": scrub_state,
+                "scrub_status": scrub,
+                "balance_status": balance,
+                "usage": usage
+            })
+
+        print(json.dumps(filesystems))
+        EOF
+      register: btrfs_inspection_raw
+      changed_when: false
+
+    - name: Parse Btrfs inspection results
+      ansible.builtin.set_fact:
+        btrfs_pools: "{{ btrfs_inspection_raw.stdout | from_json }}"
+
+    # -------------------------------------------------------------
+    # 2. Detailed Per-Pool Status Reports
+    # -------------------------------------------------------------
+    - name: Display Btrfs filesystem status and allocation
+      ansible.builtin.debug:
+        msg:
+          - "================================================================================"
+          - "FILESYSTEM: {{ item.target }} (Label: {{ item.label }}, UUID: {{ item.uuid }})"
+          - "--------------------------------------------------------------------------------"
+          - "DEVICE ERROR STATUS: {{ 'ATTENTION: Non-zero I/O errors found!' if item.has_device_errors else 'OK: All device error counters are 0' }}"
+          - "SCRUB STATUS ({{ item.scrub_state | upper }}):"
+          - "{{ item.scrub_status.splitlines() }}"
+          - "BALANCE STATUS:"
+          - "{{ item.balance_status.splitlines() }}"
+          - "ALLOCATION & USAGE (btrfs fi usage -T):"
+          - "{{ item.usage.splitlines() }}"
+          - "================================================================================"
+      loop: "{{ btrfs_pools }}"
+      loop_control:
+        label: "{{ item.target }} [{{ item.label }}]"
+
+    # -------------------------------------------------------------
+    # 3. Highlight Non-Zero Device Errors (Advisory Warnings)
+    # -------------------------------------------------------------
+    - name: "WARNING: Device I/O errors detected on Btrfs filesystem"
+      when: item.has_device_errors
+      ansible.builtin.debug:
+        msg:
+          - "********************************************************************************"
+          - "WARNING: NON-ZERO BTRFS DEVICE I/O ERRORS ON {{ inventory_hostname }}"
+          - "Filesystem: {{ item.target }} (Label: {{ item.label }}, UUID: {{ item.uuid }})"
+          - "Affected Devices & Error Counters:"
+          - "{{ item.device_errors }}"
+          - "Run 'sudo btrfs device stats {{ item.target }}' on {{ inventory_hostname }} for details."
+          - "********************************************************************************"
+      loop: "{{ btrfs_pools }}"
+      loop_control:
+        label: "{{ item.target }} [{{ item.label }}]"
+
+    # -------------------------------------------------------------
+    # 4. Host Summary
+    # -------------------------------------------------------------
+    - name: Host Btrfs Health Summary
+      vars:
+        error_pools: "{{ btrfs_pools | selectattr('has_device_errors') | map(attribute='target') | list }}"
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            'ATTENTION: ' ~ (error_pools | length) ~ ' Btrfs pool(s) on ' ~ inventory_hostname ~ ' report device I/O errors: ' ~ (error_pools | join(', '))
+            if (error_pools | length) > 0
+            else (
+              'HEALTHY: All ' ~ (btrfs_pools | length) ~ ' Btrfs filesystem(s) on ' ~ inventory_hostname ~ ' report 0 device errors.'
+              if (btrfs_pools | length) > 0
+              else 'INFO: No mounted Btrfs filesystems found on ' ~ inventory_hostname ~ '.'
+            )
+          }}

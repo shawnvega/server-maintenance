@@ -7,7 +7,7 @@ This repository manages automation and configuration for self-hosted home server
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml`, `semaphore` |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml`, `semaphore`, native Caddy reverse proxy |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0` |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
@@ -21,9 +21,67 @@ This repository manages automation and configuration for self-hosted home server
 ---
 
 ## Environment & Tooling
-* **Python Virtual Environment**: `.venv/` at repository root.
+
+### Virtual Environment (`.venv`) Usage
+This repository relies strictly on a local Python virtual environment located at `.venv/` to isolate Ansible and its dependencies from the host system (avoiding Homebrew/system Python conflicts and PEP 668 restrictions).
+
+#### 1. Automatic Provisioning
+The primary CLI wrapper `./run.sh` automatically detects if `.venv` is missing or invalid. If missing, it creates `.venv` via `python3 -m venv .venv` and installs all dependencies from `requirements.txt`:
+```bash
+./run.sh ping   # Auto-creates .venv and installs dependencies if missing
+```
+
+#### 2. Manual Setup & Activation
+To manually create and activate the virtual environment in your local shell:
+```bash
+# Create the virtual environment
+python3 -m venv .venv
+
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Install or update dependencies
+pip install -r requirements.txt
+```
+To deactivate the virtual environment:
+```bash
+deactivate
+```
+
+#### 3. Direct Binary Execution (No Activation Needed)
+For scripts, subshells, automated jobs, or AI agent commands, invoking the binaries directly inside `.venv/bin/` is preferred over shell activation:
+```bash
+# Run playbooks directly
+.venv/bin/ansible-playbook ping.yml
+
+# Validate playbook syntax
+.venv/bin/ansible-playbook upgrade.yml --syntax-check
+
+# Run ad-hoc Ansible modules
+.venv/bin/ansible standard_servers -m ping
+
+# Inspect or install packages
+.venv/bin/pip list
+.venv/bin/pip install -r requirements.txt
+```
+
+#### 4. Rebuilding / Resetting the Virtual Environment
+If the host Python version changes (e.g. after a Homebrew `python3` upgrade) or if dependencies become corrupted:
+```bash
+rm -rf .venv
+./run.sh ping
+```
+Or manually:
+```bash
+rm -rf .venv
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+### Dependencies & Configuration
 * **Dependencies**: Defined in `requirements.txt` (contains `ansible>=9.0.0`).
-* **CLI Wrapper**: `./run.sh` wraps `.venv/bin/ansible-playbook` and `ansible`, auto-creating the venv if missing.
+* **CLI Wrapper**: `./run.sh` wraps `.venv/bin/ansible-playbook` and `ansible`, managing vault passwords (`.vault_pass`) and arguments transparently.
+* **Local Temp Directory**: `ansible.cfg` configures `local_tmp = ./.ansible/tmp` to prevent sandbox permission errors in user directories.
 
 ---
 
@@ -111,6 +169,12 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ./run.sh backup-data -K
 ```
 
+### Native Caddy Reverse Proxy (192.168.4.5)
+```bash
+# Validate and deploy Caddy reverse proxy configuration with zero-downtime reload
+./run.sh caddy
+```
+
 ### Disk Space Maintenance, Cleanup & Storage Migration
 ```bash
 # Reclaim disk space across all standard servers (journal vacuum, apt clean, docker prune)
@@ -121,6 +185,18 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 
 # Format 3-device Btrfs RAID 1 (/dev/sda, /dev/sdb, /dev/sdc), migrate /var, & reclaim eMMC on 192.168.4.18
 ./run.sh migrate-var -K
+```
+
+### Btrfs Filesystem & Device Health Checks
+```bash
+# Check Btrfs health on storage servers (192.168.4.4 & 192.168.4.5)
+./run.sh check-btrfs
+
+# Check Btrfs health on a specific server (e.g. 192.168.4.18 Btrfs RAID 1 /var)
+./run.sh check-btrfs --limit 192.168.4.18
+
+# Check Btrfs health across all Btrfs-equipped servers (192.168.4.4, .5, .18, .19)
+./run.sh check-btrfs -e target_hosts=btrfs_servers
 ```
 
 ### Ad-hoc Shell Execution
@@ -197,18 +273,22 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ---
 
 ## File Structure & Conventions
-* `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`, `load_threshold`, `docker_stacks`), and groups (`standard_servers`, `readonly_servers`, `pikvm_servers`).
+* `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`, `load_threshold`, `docker_stacks`), and groups (`standard_servers`, `readonly_servers`, `pikvm_servers`, `btrfs_storage_servers`, `btrfs_servers`).
 * `ansible.cfg`: Core Ansible configuration (forks=10, inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
 * `upgrade_all.yml`: Master concurrent upgrade playbook for all 6 servers.
 * `upgrade.yml`: Native multi-stage upgrade playbook for standard servers.
 * `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
+* `btrfs_check.yml`: Automated health inspection playbook for Btrfs filesystems, device error stats, scrub & balance status, and disk allocation.
 * `migrate_var_btrfs.yml`: Automated playbook to format a 3-device Btrfs RAID 1 pool (`/dev/sda`, `/dev/sdb`, `/dev/sdc`), migrate `/var`, and reclaim internal eMMC space on `192.168.4.18`.
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `pikvm_upgrade.yml`: Automated maintenance playbook for Arch Linux ARM read-only PiKVM server.
+* `caddy.yml`: Dedicated playbook to deploy, validate, and reload native Caddy reverse proxy on `192.168.4.5`.
+* `files/caddy/Caddyfile`: Source of truth for Caddy reverse proxy routing rules and certificates.
 * `backup.yml`: Dedicated playbook for `rpi-clone` block backups.
 * `backup_data.yml`: Automated playbook for user data shares, external drive sync, and Immich DB/photo backup to Pi 5 storage (compatible with Semaphore scheduling).
 * `setup_remote_backup.yml`: Playbook for configuring remote script backups and managing crontab states on `192.168.4.4`.
 * `ping.yml`: Quick connectivity verification playbook.
+* `tasks/deploy_caddy.yml`: Modular task for validating and deploying `/etc/caddy/Caddyfile` with zero-downtime reload.
 * `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
 * `tasks/restart_vlc_stream.yml`: Modular task to cleanly stop, launch, and verify persistent fullscreen VLC video stream.
 * `run.sh`: Main entrypoint for humans and automation.

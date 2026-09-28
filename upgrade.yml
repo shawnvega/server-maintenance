@@ -27,8 +27,8 @@
         cmd: "awk '{print $1}' /proc/loadavg"
       register: wait_load
       until: (wait_load.stdout | default('0') | float) <= (load_threshold | default(4.0) | float)
-      retries: 30
-      delay: 30
+      retries: 60
+      delay: 60
       changed_when: false
       check_mode: false
 
@@ -236,4 +236,19 @@
         - vlc_stream_url is defined
         - (vlc_stream_url | length) > 0
       ansible.builtin.include_tasks: tasks/restart_vlc_stream.yml
+
+    # -------------------------------------------------------------
+    # Stage 6: Reverse Proxy (Caddy on Pi 5)
+    # -------------------------------------------------------------
+    - name: Configure Caddy reverse proxy
+      tags: [caddy, proxy]
+      when: inventory_hostname == '192.168.4.5'
+      ansible.builtin.include_tasks: tasks/deploy_caddy.yml
+
+  handlers:
+    - name: Reload Caddy
+      become: true
+      ansible.builtin.systemd:
+        name: caddy
+        state: reloaded
 
