@@ -36,13 +36,15 @@ This cluster features two distinct read-only appliance implementations:
 Upgrades **all 6 servers simultaneously** using Ansible's `strategy: free`:
 * `192.168.4.11` checks overlay and boot write protection, disables overlay, reboots into RW mode, and remounts `/boot/firmware` as RW.
 * `192.168.4.66` checks load, runs `pikvm-update --no-reboot`, and reboots cleanly back into verified Read-Only mode if updates applied.
-* Concurrently, standard servers run their backups, OS updates, and Docker pulls without waiting for `.11`'s reboot.
+* Standard servers execute pre-flight Btrfs scrub safety checks (`tags: [scrub_check]`). If an active scrub is detected (e.g. on `.4`, `.5`, `.18`, or `.19`), that node displays scrub progress/ETA and is safely skipped (`meta: end_host`) from the upgrade.
+* Unaffected standard servers concurrently run their backups, OS updates, and Docker pulls without waiting for `.11`'s reboot.
 * OS and package upgrades run across all machines in parallel (APT/DNF and Snap packages like `vlc` on `.18`, with pre-upgrade dpkg healing on Debian).
 * Standard servers restart Docker stacks and restart persistent VLC video streams (`192.168.4.18`).
 * Prompt for sudo password once (`-K`) for standard hosts and `.11` (`root@192.168.4.66` connects directly without sudo).
 
 ### 2. Standard Servers Only (`upgrade.yml`)
 Executes natively across standard servers (`.4`, `.5`, `.18`, `.19`) without touching `.11` or `.66`:
+0. **Btrfs Scrub Safety Check (`tags: [scrub_check]`)**: Detects active Btrfs scrubs across all mounted filesystems. If running, displays detailed progress/ETA and safely ends host execution (`meta: end_host`) to avoid interrupting the scrub (bypass with `-e "ignore_btrfs_scrub=true"` or `--skip-tags scrub_check`).
 1. **Load Check (`tags: [load_check]`)**: Waits for CPU load average to drop below threshold (`2.0` on `.18`, `4.0` on others).
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on `.4` and `.5`.
 3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt full-upgrade` on Debian hosts, `dnf upgrade` on Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
@@ -165,12 +167,29 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ./run.sh check-btrfs -e target_hosts=btrfs_servers # Check across all Btrfs hosts
 ```
 
-### 16. Target a Single Server
+### 16. Btrfs Scrub Operations
+```bash
+./run.sh scrub-btrfs                     # Start Btrfs scrub on Pi 5 (192.168.4.5) storage pools
+./run.sh scrub-btrfs -e scrub_target=hdds # Start scrub on a specific pool (hdds or ssds)
+./run.sh scrub-btrfs --limit 192.168.4.4  # Start scrub on 192.168.4.4
+./run.sh scrub-btrfs --limit 192.168.4.18 # Start scrub on 192.168.4.18 (/var RAID 1)
+./run.sh scrub-btrfs --limit 192.168.4.19 # Start scrub on 192.168.4.19 (Fedora root)
+./run.sh scrub-btrfs --all               # Start scrub across all Btrfs hosts (.4, .5, .18, .19)
+```
+
+Dedicated host playbooks are also available for Semaphore UI templates without needing extra CLI arguments:
+* `btrfs_scrub_4.yml`: Targets `192.168.4.4`
+* `btrfs_scrub_5.yml`: Targets `192.168.4.5`
+* `btrfs_scrub_18.yml`: Targets `192.168.4.18` (/var Btrfs RAID 1)
+* `btrfs_scrub_19.yml`: Targets `192.168.4.19` (Fedora root)
+* `btrfs_scrub_all.yml`: Targets all `btrfs_servers` concurrently
+
+### 17. Target a Single Server
 ```bash
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
 
-### 17. Run Arbitrary Ad-hoc Commands
+### 18. Run Arbitrary Ad-hoc Commands
 ```bash
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
@@ -190,6 +209,12 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 ├── backup.yml             # Dedicated backup playbook
 ├── cleanup.yml            # Disk space cleanup & maintenance playbook
 ├── btrfs_check.yml        # Btrfs filesystem health, device errors & scrub/balance status
+├── btrfs_scrub.yml        # Start & manage Btrfs scrubs (default: 192.168.4.5)
+├── btrfs_scrub_4.yml      # Dedicated Btrfs scrub for 192.168.4.4
+├── btrfs_scrub_5.yml      # Dedicated Btrfs scrub for 192.168.4.5
+├── btrfs_scrub_18.yml     # Dedicated Btrfs scrub for 192.168.4.18 (/var RAID 1)
+├── btrfs_scrub_19.yml     # Dedicated Btrfs scrub for 192.168.4.19 (Fedora root)
+├── btrfs_scrub_all.yml    # Btrfs scrub across all Btrfs servers concurrently
 ├── migrate_var_btrfs.yml  # Btrfs RAID 1 /var migration & eMMC reclamation playbook (192.168.4.18)
 ├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
@@ -199,6 +224,8 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 │   └── caddy/
 │       └── Caddyfile      # Live reverse proxy routing configuration
 ├── tasks/
+│   ├── check_btrfs_scrub.yml    # Pre-flight active scrub detection task
+│   ├── run_btrfs_scrub.yml      # Modular Btrfs scrub execution & reporting task
 │   ├── deploy_caddy.yml         # Modular Caddy validation and reload task
 │   ├── restart_docker_stack.yml # Modular stack restart with load check
 │   └── restart_vlc_stream.yml   # Modular persistent VLC fullscreen stream restart

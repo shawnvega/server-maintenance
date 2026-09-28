@@ -1,0 +1,141 @@
+---
+- name: Query active Btrfs scrub status across mounted filesystems
+  tags: [always, scrub_check]
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      python3 - << 'EOF'
+      import sys, os, subprocess, json, re, shutil
+
+      def inspect_scrubs():
+          running_scrubs = []
+          btrfs_bin = shutil.which("btrfs") or "/usr/bin/btrfs"
+          if not shutil.which("btrfs") and not os.path.exists(btrfs_bin):
+              print(json.dumps({"scrub_running": False, "running_scrubs": []}))
+              return
+
+          mounts = []
+          seen_uuids = set()
+          findmnt_bin = shutil.which("findmnt") or "/usr/bin/findmnt"
+
+          if shutil.which("findmnt") or os.path.exists(findmnt_bin):
+              try:
+                  p = subprocess.run(
+                      [findmnt_bin, "--list", "--all", "--canonicalize", "--notruncate", "--nofsroot", "--uniq", "--noheadings", "--output", "TARGET,UUID", "--types", "btrfs"],
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10
+                  )
+                  for line in p.stdout.splitlines():
+                      parts = line.strip().split()
+                      if not parts:
+                          continue
+                      target = parts[0]
+                      uuid = parts[1] if len(parts) > 1 else target
+                      if uuid not in seen_uuids:
+                          seen_uuids.add(uuid)
+                          mounts.append((target, uuid))
+              except Exception:
+                  pass
+
+          if not mounts:
+              try:
+                  with open("/proc/mounts", "r") as f:
+                      for line in f:
+                          parts = line.split()
+                          if len(parts) >= 3 and parts[2] == "btrfs":
+                              target = parts[1]
+                              if target not in [m[0] for m in mounts]:
+                                  mounts.append((target, target))
+              except Exception:
+                  pass
+
+          for target, uuid in mounts:
+              try:
+                  res = subprocess.run(
+                      [btrfs_bin, "scrub", "status", target],
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=15
+                  )
+                  out = res.stdout + "\n" + res.stderr
+                  if re.search(r"(\bstatus:\s*running\b|\bis running\b)", out, re.IGNORECASE):
+                      info = {
+                          "target": target,
+                          "uuid": uuid,
+                          "status": "running"
+                      }
+                      for line in out.splitlines():
+                          line = line.strip()
+                          if not line or ":" not in line:
+                              continue
+                          k, v = line.split(":", 1)
+                          k = k.strip().lower()
+                          v = v.strip()
+                          if k == "scrub started":
+                              info["started"] = v
+                          elif k == "duration":
+                              info["duration"] = v
+                          elif k == "time left":
+                              info["time_left"] = v
+                          elif k == "eta":
+                              info["eta"] = v
+                          elif k == "total to scrub":
+                              info["total_to_scrub"] = v
+                          elif k == "bytes scrubbed":
+                              info["bytes_scrubbed"] = v
+                          elif k == "rate":
+                              info["rate"] = v
+                          elif k == "error summary":
+                              info["error_summary"] = v
+                      running_scrubs.append(info)
+              except Exception:
+                  pass
+
+          print(json.dumps({
+              "scrub_running": len(running_scrubs) > 0,
+              "running_scrubs": running_scrubs
+          }))
+
+      try:
+          inspect_scrubs()
+      except Exception as e:
+          print(json.dumps({"scrub_running": False, "running_scrubs": [], "error": str(e)}))
+      EOF
+  register: btrfs_scrub_check_raw
+  changed_when: false
+  failed_when: btrfs_scrub_check_raw.rc != 0
+  check_mode: false
+
+- name: Parse Btrfs scrub check results
+  tags: [always, scrub_check]
+  ansible.builtin.set_fact:
+    btrfs_scrub_status: "{{ btrfs_scrub_check_raw.stdout | from_json }}"
+
+- name: Display warning and skip notice for in-progress Btrfs scrub
+  tags: [always, scrub_check]
+  when: btrfs_scrub_status.scrub_running | default(false) | bool
+  ansible.builtin.debug:
+    msg:
+      - "********************************************************************************"
+      - "NOTICE: BTRFS SCRUB IN PROGRESS ON {{ inventory_hostname }}"
+      - "Filesystem: {{ item.target }} (UUID: {{ item.uuid | default('unknown') }})"
+      - "Progress: {{ item.bytes_scrubbed | default('unknown') }} of {{ item.total_to_scrub | default('unknown') }}"
+      - "Rate: {{ item.rate | default('unknown') }}"
+      - "Time Remaining: {{ item.time_left | default('unknown') }} (ETA: {{ item.eta | default('unknown') }})"
+      - "Duration So Far: {{ item.duration | default('unknown') }} (Started: {{ item.started | default('unknown') }})"
+      - "--> SKIPPING ALL UPGRADE TASKS on {{ inventory_hostname }} to protect active scrub."
+      - "    To override and force upgrade, rerun with: -e 'ignore_btrfs_scrub=true'"
+      - "********************************************************************************"
+  loop: "{{ btrfs_scrub_status.running_scrubs | default([]) }}"
+  loop_control:
+    label: "{{ item.target }}"
+
+- name: Confirm no active Btrfs scrub operations
+  tags: [always, scrub_check]
+  when: not (btrfs_scrub_status.scrub_running | default(false) | bool)
+  ansible.builtin.debug:
+    msg: "Btrfs scrub check passed on {{ inventory_hostname }}: No active scrub operations."
+
+- name: End host execution if Btrfs scrub is in progress
+  tags: [always, scrub_check]
+  when:
+    - btrfs_scrub_status.scrub_running | default(false) | bool
+    - not (ignore_btrfs_scrub | default(false) | bool)
+  ansible.builtin.meta: end_host

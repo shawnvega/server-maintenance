@@ -1,0 +1,246 @@
+---
+# -------------------------------------------------------------
+# 1. Discover Btrfs Filesystems, Errors & Scrub States
+# -------------------------------------------------------------
+- name: Query Btrfs filesystem status and scrub state
+  ansible.builtin.shell: |
+    python3 - << 'EOF'
+    import json, os, subprocess
+
+    def run(cmd):
+        p = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return p.stdout.strip(), p.stderr.strip(), p.returncode
+
+    findmnt_out, _, _ = run("findmnt --list --all --canonicalize --notruncate --nofsroot --uniq --noheadings --output TARGET,UUID,LABEL --types btrfs")
+    lines = [l.strip() for l in findmnt_out.splitlines() if l.strip()]
+
+    seen_uuids = set()
+    all_pools = []
+    target_filter = os.environ.get("SCRUB_TARGET", "").strip().lower()
+
+    for line in lines:
+        parts = line.split()
+        if not parts:
+            continue
+        target = parts[0]
+        uuid = parts[1] if len(parts) > 1 else "unknown"
+        label = parts[2] if len(parts) > 2 else ""
+
+        if uuid in seen_uuids:
+            continue
+        seen_uuids.add(uuid)
+
+        dev_stats, _, _ = run(f"btrfs device stats {target}")
+        scrub, _, _ = run(f"btrfs scrub status {target}")
+        scrub_running = "running" in scrub.lower()
+
+        errors = []
+        for s in dev_stats.splitlines():
+            s_clean = s.strip()
+            if s_clean and not s_clean.endswith(" 0"):
+                errors.append(s_clean)
+
+        name = label if (label and label != "none") else target
+
+        all_pools.append({
+            "target": target,
+            "uuid": uuid,
+            "label": label or "none",
+            "name": name,
+            "scrub_running": scrub_running,
+            "scrub_status": scrub,
+            "has_device_errors": len(errors) > 0,
+            "device_errors": errors
+        })
+
+    matched_pools = []
+    for p in all_pools:
+        if not target_filter or target_filter in ["all", "auto"]:
+            matched_pools.append(p)
+        elif (target_filter == p["target"].lower() or 
+              target_filter == p["uuid"].lower() or 
+              target_filter == p["label"].lower() or
+              p["target"].lower().endswith(target_filter)):
+            matched_pools.append(p)
+
+    result = {
+        "all_pools": all_pools,
+        "target_pools": matched_pools
+    }
+    print(json.dumps(result))
+    EOF
+  environment:
+    SCRUB_TARGET: "{{ scrub_target | default('all') }}"
+  register: btrfs_discovery_raw
+  changed_when: false
+  failed_when: btrfs_discovery_raw.rc != 0
+
+- name: Parse Btrfs discovery results
+  ansible.builtin.set_fact:
+    btrfs_discovery: "{{ btrfs_discovery_raw.stdout | from_json }}"
+
+# -------------------------------------------------------------
+# 2. Safety & Validation Checks
+# -------------------------------------------------------------
+- name: Verify Btrfs filesystems exist on host
+  ansible.builtin.fail:
+    msg: "No mounted Btrfs filesystems found on {{ inventory_hostname }}."
+  when: btrfs_discovery.all_pools | length == 0
+
+- name: Verify requested Btrfs pool was found
+  ansible.builtin.fail:
+    msg: >-
+      No Btrfs filesystem matching '{{ scrub_target }}' was found on {{ inventory_hostname }}.
+      Available pools: {{ btrfs_discovery.all_pools | map(attribute='name') | list }}
+  when:
+    - scrub_target is defined
+    - scrub_target not in ['all', '', 'auto']
+    - btrfs_discovery.target_pools | length == 0
+
+# -------------------------------------------------------------
+# 3. Advisory Warnings (Existing Device I/O Errors)
+# -------------------------------------------------------------
+- name: Advisory - Device errors detected on targeted pool
+  ansible.builtin.debug:
+    msg:
+      - "--------------------------------------------------------------------------------"
+      - "ADVISORY: Device I/O errors detected on {{ item.target }} (Label: {{ item.label }})"
+      - "Error counters:"
+      - "{{ item.device_errors }}"
+      - "Scrub will read all data/metadata mirrors, verify checksums, and attempt repair."
+      - "--------------------------------------------------------------------------------"
+  loop: "{{ btrfs_discovery.target_pools }}"
+  loop_control:
+    label: "{{ item.target }} [{{ item.label }}]"
+  when: item.has_device_errors
+
+# -------------------------------------------------------------
+# 4. Scrub Execution / Lifecycle Tasks
+# -------------------------------------------------------------
+- name: Notice - Btrfs scrub is already in progress
+  ansible.builtin.debug:
+    msg:
+      - "--------------------------------------------------------------------------------"
+      - "SCRUB ALREADY IN PROGRESS: {{ item.target }} (Label: {{ item.label }})"
+      - "A scrub is already actively running on this filesystem. Not starting a new scrub."
+      - "{{ item.scrub_status.splitlines() }}"
+      - "--------------------------------------------------------------------------------"
+  loop: "{{ btrfs_discovery.target_pools }}"
+  loop_control:
+    label: "{{ item.target }} [{{ item.label }}]"
+  when:
+    - scrub_action | default('start') == 'start'
+    - item.scrub_running
+
+- name: Start Btrfs background scrub
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['btrfs', 'scrub', 'start']
+        + (['-r'] if (scrub_readonly | default(false) | bool) else [])
+        + [item.target]
+      }}
+  loop: "{{ btrfs_discovery.target_pools }}"
+  loop_control:
+    label: "{{ item.target }} [{{ item.label }}]"
+  when:
+    - scrub_action | default('start') == 'start'
+    - not item.scrub_running
+  register: scrub_start_cmd
+  changed_when: scrub_start_cmd.rc == 0
+  failed_when: scrub_start_cmd.rc != 0
+
+- name: Cancel running Btrfs scrub
+  ansible.builtin.command:
+    argv:
+      - btrfs
+      - scrub
+      - cancel
+      - "{{ item.target }}"
+  loop: "{{ btrfs_discovery.target_pools }}"
+  loop_control:
+    label: "{{ item.target }} [{{ item.label }}]"
+  when:
+    - scrub_action | default('start') == 'cancel'
+    - item.scrub_running
+  register: scrub_cancel_cmd
+  changed_when: scrub_cancel_cmd.rc == 0
+  failed_when: scrub_cancel_cmd.rc != 0
+
+- name: Resume aborted Btrfs scrub
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['btrfs', 'scrub', 'resume']
+        + (['-r'] if (scrub_readonly | default(false) | bool) else [])
+        + [item.target]
+      }}
+  loop: "{{ btrfs_discovery.target_pools }}"
+  loop_control:
+    label: "{{ item.target }} [{{ item.label }}]"
+  when:
+    - scrub_action | default('start') == 'resume'
+    - not item.scrub_running
+  register: scrub_resume_cmd
+  changed_when: scrub_resume_cmd.rc == 0
+  failed_when: scrub_resume_cmd.rc != 0
+
+# Allow kernel scrub thread a moment to initialize device stats if new scrub started
+- name: Allow background scrub to initialize
+  ansible.builtin.pause:
+    seconds: 1
+  when:
+    - scrub_start_cmd is defined
+    - scrub_start_cmd is changed
+
+# -------------------------------------------------------------
+# 5. Query & Display Updated Status
+# -------------------------------------------------------------
+- name: Query updated Btrfs scrub status
+  ansible.builtin.command:
+    argv:
+      - btrfs
+      - scrub
+      - status
+      - "{{ item.target }}"
+  loop: "{{ btrfs_discovery.target_pools }}"
+  loop_control:
+    label: "{{ item.target }} [{{ item.label }}]"
+  register: scrub_status_query
+  changed_when: false
+  failed_when: scrub_status_query.rc != 0
+
+- name: Display Btrfs scrub status
+  ansible.builtin.debug:
+    msg:
+      - "================================================================================"
+      - "FILESYSTEM: {{ item.item.target }} (Label: {{ item.item.label }}, UUID: {{ item.item.uuid }})"
+      - "--------------------------------------------------------------------------------"
+      - "ACTION: {{ 'Already in progress (prior scrub continuing)' if item.item.scrub_running else ('Background scrub initiated' if (scrub_action | default('start') == 'start') else scrub_action | default('start') | upper) }}"
+      - "SCRUB STATUS:"
+      - "{{ item.stdout_lines }}"
+      - "================================================================================"
+  loop: "{{ scrub_status_query.results }}"
+  loop_control:
+    label: "{{ item.item.target }} [{{ item.item.label }}]"
+
+# -------------------------------------------------------------
+# 6. Host Summary
+# -------------------------------------------------------------
+- name: Host Btrfs Scrub Summary
+  vars:
+    started_pools: "{{ btrfs_discovery.target_pools | rejectattr('scrub_running') | map(attribute='name') | list }}"
+    running_pools: "{{ btrfs_discovery.target_pools | selectattr('scrub_running') | map(attribute='name') | list }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        'Scrub initiated on ' ~ inventory_hostname ~ ' for pool(s): ' ~ (started_pools | join(', '))
+        if (started_pools | length > 0 and (scrub_action | default('start') == 'start'))
+        else (
+          'All targeted Btrfs pool(s) on ' ~ inventory_hostname ~ ' already had scrubs in progress: ' ~ (running_pools | join(', '))
+          if (running_pools | length > 0 and (scrub_action | default('start') == 'start'))
+          else (
+            'Scrub action ' ~ scrub_action | default('start') ~ ' completed on ' ~ inventory_hostname ~ '.'
+          )
+        )
+      }}

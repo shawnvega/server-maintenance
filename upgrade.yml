@@ -5,6 +5,13 @@
 
   tasks:
     # -------------------------------------------------------------
+    # Stage 0: Btrfs Scrub Pre-flight Safety Check
+    # -------------------------------------------------------------
+    - name: Check for active Btrfs scrub operations
+      tags: [always, scrub_check]
+      ansible.builtin.include_tasks: tasks/check_btrfs_scrub.yml
+
+    # -------------------------------------------------------------
     # Stage 1: System Load Check
     # -------------------------------------------------------------
     - name: Check current system load

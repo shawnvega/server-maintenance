@@ -115,6 +115,13 @@
       changed_when: false
 
     # =============================================================
+    # Stage STD-0: Btrfs Scrub Pre-flight Safety Check
+    # =============================================================
+    - name: "[Standard] Check for active Btrfs scrub operations"
+      tags: [always, scrub_check]
+      when: inventory_hostname in groups.get('standard_servers', [])
+      ansible.builtin.include_tasks: tasks/check_btrfs_scrub.yml
+
     # =============================================================
     # Stage STD-1: Standard Servers Load Check & Backups
     # =============================================================

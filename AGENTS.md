@@ -91,12 +91,13 @@ python3 -m venv .venv
 Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 1. `192.168.4.11` checks overlay and boot write protection, disables overlay, reboots into RW mode, and remounts `/boot/firmware` as RW.
 2. `192.168.4.66` runs `pikvm-update --no-reboot`, and if updates are applied, reboots cleanly into verified Read-Only mode.
-3. Simultaneously, standard servers run their load checks, `rpi-clone` backups, and container pulls.
+3. Standard servers immediately run pre-flight Btrfs scrub safety checks (`tags: [scrub_check]`). If an active scrub is detected on any node (such as `.4`, `.5`, `.18`, or `.19`), that node displays scrub progress/ETA and is cleanly skipped (`meta: end_host`) to prevent interrupting the scrub. Unaffected nodes run their load checks, `rpi-clone` backups, and container pulls.
 4. OS and package upgrades execute across standard nodes concurrently (APT/DNF and Snap packages like `vlc` on `.18`, with pre-upgrade dpkg healing on Debian).
 5. Standard nodes restart Docker stacks, then restart persistent VLC video streams (`192.168.4.18`).
 6. `192.168.4.11` restores boot write protection, re-enables overlay, and reboots back into verified Read-Only mode.
 
 ### Standard Hosts Only (`upgrade.yml` targeting `standard_servers`)
+0. **Btrfs Scrub Safety Check (`tags: [scrub_check]`)**: Detects active Btrfs scrub operations across all mounted filesystems. If running, displays detailed progress/ETA and safely ends host execution (`meta: end_host`) to avoid heavy I/O contention or interrupting the scrub (can be overridden with `-e "ignore_btrfs_scrub=true"` or `--skip-tags scrub_check`).
 1. **Load Check (`tags: [load_check]`)**: Waits for loadavg to drop below `load_threshold`.
 2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
 3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt` for Debian/Pi OS, `dnf` for Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
@@ -199,6 +200,27 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ./run.sh check-btrfs -e target_hosts=btrfs_servers
 ```
 
+### Btrfs Scrub Operations
+```bash
+# Start Btrfs background scrub on Pi 5 (192.168.4.5) storage pools
+./run.sh scrub-btrfs
+
+# Start Btrfs scrub on a specific pool (hdds or ssds)
+./run.sh scrub-btrfs -e scrub_target=hdds
+
+# Start Btrfs scrub on 192.168.4.4
+./run.sh scrub-btrfs --limit 192.168.4.4
+
+# Start Btrfs scrub on 192.168.4.18 (/var Btrfs RAID 1)
+./run.sh scrub-btrfs --limit 192.168.4.18
+
+# Start Btrfs scrub on 192.168.4.19 (Fedora root)
+./run.sh scrub-btrfs --limit 192.168.4.19
+
+# Start Btrfs scrub across all Btrfs servers concurrently
+./run.sh scrub-btrfs --all
+```
+
 ### Ad-hoc Shell Execution
 ```bash
 ./run.sh raw 'uptime'
@@ -279,6 +301,9 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `upgrade.yml`: Native multi-stage upgrade playbook for standard servers.
 * `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
 * `btrfs_check.yml`: Automated health inspection playbook for Btrfs filesystems, device error stats, scrub & balance status, and disk allocation.
+* `btrfs_scrub.yml`: Automated playbook to start and manage background Btrfs scrubs on storage pools with idempotent state checks and error summaries (default: `192.168.4.5`).
+* `btrfs_scrub_4.yml`, `btrfs_scrub_5.yml`, `btrfs_scrub_18.yml`, `btrfs_scrub_19.yml`: Dedicated host playbooks for starting Btrfs scrub on specific nodes (ideal for Semaphore UI task templates).
+* `btrfs_scrub_all.yml`: Playbook to start background Btrfs scrubs concurrently across all cluster Btrfs servers (`btrfs_servers`).
 * `migrate_var_btrfs.yml`: Automated playbook to format a 3-device Btrfs RAID 1 pool (`/dev/sda`, `/dev/sdb`, `/dev/sdc`), migrate `/var`, and reclaim internal eMMC space on `192.168.4.18`.
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `pikvm_upgrade.yml`: Automated maintenance playbook for Arch Linux ARM read-only PiKVM server.
@@ -288,6 +313,8 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `backup_data.yml`: Automated playbook for user data shares, external drive sync, and Immich DB/photo backup to Pi 5 storage (compatible with Semaphore scheduling).
 * `setup_remote_backup.yml`: Playbook for configuring remote script backups and managing crontab states on `192.168.4.4`.
 * `ping.yml`: Quick connectivity verification playbook.
+* `tasks/check_btrfs_scrub.yml`: Modular task for pre-flight active Btrfs scrub detection during upgrade pipelines.
+* `tasks/run_btrfs_scrub.yml`: Modular task for dynamic Btrfs filesystem discovery, idempotency checks, scrub lifecycle, and status reporting.
 * `tasks/deploy_caddy.yml`: Modular task for validating and deploying `/etc/caddy/Caddyfile` with zero-downtime reload.
 * `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
 * `tasks/restart_vlc_stream.yml`: Modular task to cleanly stop, launch, and verify persistent fullscreen VLC video stream.

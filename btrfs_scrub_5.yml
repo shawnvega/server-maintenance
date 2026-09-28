@@ -1,0 +1,9 @@
+---
+- name: Start Btrfs scrub on 192.168.4.5
+  hosts: 192.168.4.5
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Execute Btrfs scrub workflow
+      ansible.builtin.include_tasks: tasks/run_btrfs_scrub.yml

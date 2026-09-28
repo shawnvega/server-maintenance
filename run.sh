@@ -19,6 +19,7 @@ usage() {
   echo "  upgrade-mac          Run upgrade on local Mac (Homebrew formulae & casks, npm, gh, MAS, macOS)"
   echo "  cleanup              Reclaim disk space (journal vacuum, apt cache, docker prune)"
   echo "  check-btrfs          Inspect Btrfs filesystem health, device errors, scrub & balance"
+  echo "  scrub-btrfs          Start Btrfs background scrub on storage pools (default: 192.168.4.5)"
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
   echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
@@ -33,6 +34,10 @@ usage() {
   echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
   echo "  $0 check-btrfs                     # Check Btrfs health on storage servers (192.168.4.4 & .5)"
   echo "  $0 check-btrfs --limit 192.168.4.18 # Check Btrfs health on specific host"
+  echo "  $0 scrub-btrfs                     # Start Btrfs scrub on Pi 5 (192.168.4.5)"
+  echo "  $0 scrub-btrfs -e scrub_target=hdds # Start scrub on specific pool (hdds or ssds)"
+  echo "  $0 scrub-btrfs --limit 192.168.4.4  # Start scrub on 192.168.4.4"
+  echo "  $0 scrub-btrfs --all               # Start scrub across all Btrfs hosts (.4, .5, .18, .19)"
   echo "  $0 migrate-var -K                  # Migrate /var to Btrfs RAID 1 on 192.168.4.18"
   echo "  $0 restart-vlc                     # Restart VLC stream on 192.168.4.18"
   echo "  $0 caddy                           # Deploy & validate Caddy reverse proxy on Pi 5"
@@ -122,6 +127,19 @@ case "${CMD}" in
       exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_check.yml" -e "target_hosts=servers" "$@"
     else
       exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_check.yml" "$@"
+    fi
+    ;;
+  scrub-btrfs|btrfs-scrub|scrub)
+    if [[ " $* " == *" --all"* ]]; then
+      args=()
+      for arg in "$@"; do
+        [[ "${arg}" != "--all" ]] && args+=("${arg}")
+      done
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_scrub_all.yml" "${args[@]}"
+    elif [[ " $* " == *" --limit "* ]]; then
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_scrub.yml" -e "target_hosts=servers" "$@"
+    else
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/btrfs_scrub.yml" "$@"
     fi
     ;;
   migrate-var)

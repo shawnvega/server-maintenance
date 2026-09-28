@@ -44,6 +44,10 @@ Targets hosts in the `standard_servers` group (`192.168.4.4`, `192.168.4.5`, `19
 # Skip backup (e.g., if already backed up recently)
 ./run.sh upgrade --skip-tags backup -K
 
+# Force upgrade even if Btrfs scrub is active (override safety skip)
+./run.sh upgrade -K -e "ignore_btrfs_scrub=true"
+./run.sh upgrade --skip-tags scrub_check -K
+
 # Selective stage execution:
 ./run.sh upgrade --tags os -K          # OS package upgrades only
 ./run.sh upgrade --tags snap -K        # Snap package upgrades only (192.168.4.18)
@@ -112,7 +116,31 @@ Inspect Btrfs storage pools, device I/O error stats, scrub status, balance statu
 ./run.sh check-btrfs -e target_hosts=btrfs_servers
 ```
 
-### G. Ad-hoc Diagnostics and Cluster Inspection
+### G. Btrfs Scrub Execution & Monitoring
+Start background checksum verification and repair on Btrfs storage pools:
+```bash
+# Start background scrub on Pi 5 (192.168.4.5) storage pools (default: all pools)
+./run.sh scrub-btrfs
+
+# Start background scrub on a specific pool (hdds or ssds)
+./run.sh scrub-btrfs -e scrub_target=hdds
+
+# Start background scrub on 192.168.4.4
+./run.sh scrub-btrfs --limit 192.168.4.4
+
+# Start background scrub on 192.168.4.18 (/var Btrfs RAID 1)
+./run.sh scrub-btrfs --limit 192.168.4.18
+
+# Start background scrub on 192.168.4.19 (Fedora root)
+./run.sh scrub-btrfs --limit 192.168.4.19
+
+# Start background scrub across all Btrfs servers concurrently
+./run.sh scrub-btrfs --all
+```
+
+> **Semaphore UI**: Dedicated playbooks [`btrfs_scrub_4.yml`](file:///Users/shawn/StudioProjects/server-maintenance/btrfs_scrub_4.yml), [`btrfs_scrub_5.yml`](file:///Users/shawn/StudioProjects/server-maintenance/btrfs_scrub_5.yml), [`btrfs_scrub_18.yml`](file:///Users/shawn/StudioProjects/server-maintenance/btrfs_scrub_18.yml), [`btrfs_scrub_19.yml`](file:///Users/shawn/StudioProjects/server-maintenance/btrfs_scrub_19.yml), and [`btrfs_scrub_all.yml`](file:///Users/shawn/StudioProjects/server-maintenance/btrfs_scrub_all.yml) can be selected directly when creating or scheduling Task Templates without needing extra CLI arguments.
+
+### H. Ad-hoc Diagnostics and Cluster Inspection
 Execute commands across all nodes or targeted servers:
 ```bash
 ./run.sh raw 'uptime'
