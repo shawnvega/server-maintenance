@@ -346,6 +346,15 @@
       poll: 10
       changed_when: false
 
+    - name: "[Standard] Load encrypted secrets for Docker environments"
+      tags: [docker]
+      when:
+        - inventory_hostname in groups.get('standard_servers', [])
+        - docker_stacks is defined
+        - (docker_stacks | length) > 0
+      ansible.builtin.include_vars:
+        file: vars/vault.yml
+
     - name: "[Standard] Restart Docker stacks with load check between each stack"
       tags: [docker]
       when:

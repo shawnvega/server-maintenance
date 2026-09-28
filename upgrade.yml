@@ -209,6 +209,14 @@
       poll: 10
       changed_when: false
 
+    - name: Load encrypted secrets for Docker environments
+      tags: [docker]
+      when:
+        - docker_stacks is defined
+        - (docker_stacks | length) > 0
+      ansible.builtin.include_vars:
+        file: vars/vault.yml
+
     - name: Restart Docker stacks with load check between each stack
       tags: [docker]
       ansible.builtin.include_tasks: tasks/restart_docker_stack.yml
