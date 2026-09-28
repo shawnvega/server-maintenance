@@ -1,0 +1,33 @@
+---
+- name: Configure remote script-based backups
+  hosts: 192.168.4.4
+  become: true
+  tasks:
+    - name: Ensure logs directory exists
+      ansible.builtin.file:
+        path: /home/shawn/logs
+        state: directory
+        owner: shawn
+        group: shawn
+        mode: '0755'
+
+    - name: Copy backup script
+      ansible.builtin.copy:
+        src: files/backup-immich.sh
+        dest: /home/shawn/backup-immich.sh
+        owner: shawn
+        group: shawn
+        mode: '0755'
+
+    - name: Schedule nightly backup cron job
+      ansible.builtin.cron:
+        name: "Nightly Immich backup to 192.168.4.5"
+        user: root
+        minute: "33"
+        hour: "3"
+        job: "bash /home/shawn/backup-immich.sh >> /home/shawn/logs/backup.log 2>&1"
+
+    - name: Remove old OMV userdefined cron file
+      ansible.builtin.file:
+        path: /var/lib/openmediavault/cron.d/userdefined-3ef02ff1-5dbd-46d4-9c7b-c49cdfb7adaa
+        state: absent
