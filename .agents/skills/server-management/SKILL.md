@@ -86,14 +86,17 @@ Targets `192.168.4.66` running Arch Linux ARM with native read-only mounts and `
 5. Verify both root filesystem and boot partition are safely in Read-Only mode (`findmnt -n -o OPTIONS / | grep -qw ro` and `findmnt -n -o OPTIONS /boot | grep -qw ro`).
 6. Verify KVMD service configuration integrity (`kvmd -m`).
 
-### E. Dedicated Backups (`rpi-clone`)
-Run hardware backups to destination SD/NVMe/USB storage:
+### E. Dedicated Backups (`rpi-clone` & Data Sync)
+Run hardware block backups or data share synchronizations:
 ```bash
-# Run backup for all configured hosts (192.168.4.4, 192.168.4.5)
+# Block storage backup (rpi-clone to SD/storage on 192.168.4.4, 192.168.4.5)
 ./run.sh backup -K
 
-# Run backup on a specific host
+# Run block backup on a specific host
 ./run.sh backup --limit 192.168.4.4 -K
+
+# Data share & Immich synchronization (192.168.4.4 -> Pi 5 storage; can be scheduled in Semaphore)
+./run.sh backup-data -K
 ```
 
 ### E. Ad-hoc Diagnostics and Cluster Inspection

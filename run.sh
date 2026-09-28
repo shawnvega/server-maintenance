@@ -11,6 +11,7 @@ usage() {
   echo "Commands:"
   echo "  ping                 Test SSH connectivity to all servers"
   echo "  backup               Run backup (rpi-clone) on configured servers"
+  echo "  backup-data          Run data and Immich sync from 192.168.4.4 to Pi 5"
   echo "  upgrade              Run full upgrade pipeline on standard servers"
   echo "  upgrade-ro           Run upgrade on read-only Pi (192.168.4.11 OverlayFS cycle)"
   echo "  upgrade-pikvm        Run upgrade on PiKVM (192.168.4.66 pikvm-update & RO restore)"
@@ -24,7 +25,8 @@ usage() {
   echo ""
   echo "Examples:"
   echo "  $0 ping"
-  echo "  $0 backup -K                       # Run backup only"
+  echo "  $0 backup -K                       # Run block backup (rpi-clone) only"
+  echo "  $0 backup-data -K                  # Run data and Immich backup (192.168.4.4 -> Pi 5)"
   echo "  $0 cleanup -K                      # Clean disk space across standard servers"
   echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
   echo "  $0 migrate-var -K                  # Migrate /var to Btrfs RAID 1 on 192.168.4.18"
@@ -85,6 +87,9 @@ case "${CMD}" in
     ;;
   backup)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/backup.yml" "$@"
+    ;;
+  backup-data)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/backup_data.yml" "$@"
     ;;
   upgrade)
     if [[ " $* " == *" --limit 192.168.4.11"* ]] || [[ " $* " == *" --limit readonly_servers"* ]]; then

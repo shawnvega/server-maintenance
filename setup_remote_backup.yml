@@ -19,13 +19,11 @@
         group: shawn
         mode: '0755'
 
-    - name: Schedule nightly backup cron job
+    - name: Remove legacy cron job (migrated to Semaphore / backup_data.yml)
       ansible.builtin.cron:
         name: "Nightly Immich backup to 192.168.4.5"
         user: root
-        minute: "33"
-        hour: "3"
-        job: "bash /home/shawn/backup-immich.sh >> /home/shawn/logs/backup.log 2>&1"
+        state: absent
 
     - name: Remove old OMV userdefined cron file
       ansible.builtin.file:

@@ -7,7 +7,7 @@ This repository manages automation and configuration for self-hosted home server
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml` |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml`, `semaphore` |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0` |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
@@ -102,9 +102,13 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ./run.sh upgrade --limit 192.168.4.4 -K   # Single host
 ```
 
-### Dedicated Backup Only
+### Dedicated Backups
 ```bash
+# Block storage backup (rpi-clone to SD/storage on 192.168.4.4, 192.168.4.5)
 ./run.sh backup -K
+
+# Data share & Immich synchronization (192.168.4.4 -> Pi 5 storage; can be scheduled in Semaphore)
+./run.sh backup-data -K
 ```
 
 ### Disk Space Maintenance, Cleanup & Storage Migration
@@ -201,7 +205,9 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `migrate_var_btrfs.yml`: Automated playbook to format a 3-device Btrfs RAID 1 pool (`/dev/sda`, `/dev/sdb`, `/dev/sdc`), migrate `/var`, and reclaim internal eMMC space on `192.168.4.18`.
 * `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
 * `pikvm_upgrade.yml`: Automated maintenance playbook for Arch Linux ARM read-only PiKVM server.
-* `backup.yml`: Dedicated playbook for `rpi-clone` backups.
+* `backup.yml`: Dedicated playbook for `rpi-clone` block backups.
+* `backup_data.yml`: Automated playbook for user data shares, external drive sync, and Immich DB/photo backup to Pi 5 storage (compatible with Semaphore scheduling).
+* `setup_remote_backup.yml`: Playbook for configuring remote script backups and managing crontab states on `192.168.4.4`.
 * `ping.yml`: Quick connectivity verification playbook.
 * `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
 * `tasks/restart_vlc_stream.yml`: Modular task to cleanly stop, launch, and verify persistent fullscreen VLC video stream.

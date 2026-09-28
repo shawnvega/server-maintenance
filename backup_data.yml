@@ -1,0 +1,154 @@
+---
+- name: Orchestrate data and Immich backups (192.168.4.4 to Pi 5)
+  hosts: 192.168.4.4
+  become: true
+  gather_facts: false
+
+  vars:
+    source_mount: "/srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2"
+    target_host: "192.168.4.5"
+    target_user: "shawn"
+    target_mount: "/srv/dev-disk-by-uuid-c1c2d4dd-bc6b-4f1f-88dd-e4c8b48d2c3a"
+    ssh_key: "/home/shawn/.ssh/id_ed25519"
+    immich_dir: "/home/shawn/docker/immich-docker-compose"
+    log_dir: "/home/shawn/logs"
+    sync_shares:
+      - name: "omv_bkup"
+        src: "{{ source_mount }}/omv_bkup/"
+        dest: "{{ target_mount }}/omv_bkup/"
+        extra_opts: ""
+      - name: "shawn_data"
+        src: "{{ source_mount }}/shawn_data/"
+        dest: "{{ target_mount }}/shawn_data/"
+        extra_opts: ""
+      - name: "movies_shows"
+        src: "{{ source_mount }}/movies_shows/"
+        dest: "{{ target_mount }}/movies_shows/"
+        extra_opts: ""
+      - name: "tesla_usb"
+        src: "{{ source_mount }}/tesla_usb/"
+        dest: "{{ target_mount }}/tesla_usb/"
+        extra_opts: "-P"
+      - name: "yania_data"
+        src: "{{ source_mount }}/yania_data/"
+        dest: "{{ target_mount }}/yania_data/"
+        extra_opts: ""
+
+  tasks:
+    - name: Ensure logs directory exists
+      ansible.builtin.file:
+        path: "{{ log_dir }}"
+        state: directory
+        owner: shawn
+        group: shawn
+        mode: "0755"
+
+    - name: Ensure legacy cron job on 192.168.4.4 is disabled
+      ansible.builtin.cron:
+        name: "Nightly Immich backup to 192.168.4.5"
+        user: root
+        state: absent
+
+    # -------------------------------------------------------------------------
+    # Pre-flight Mount & Connectivity Verification
+    # -------------------------------------------------------------------------
+    - name: Verify source drive mountpoint exists on 192.168.4.4
+      ansible.builtin.command:
+        cmd: "fgrep -q {{ source_mount }} /proc/mounts"
+      register: src_mount_check
+      changed_when: false
+      failed_when: src_mount_check.rc != 0
+
+    - name: Verify target host storage is mounted and reachable over SSH
+      ansible.builtin.command:
+        cmd: >-
+          ssh -i {{ ssh_key }} -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new
+          {{ target_user }}@{{ target_host }}
+          "fgrep -q {{ target_mount }} /proc/mounts"
+      register: tgt_mount_check
+      changed_when: false
+      failed_when: tgt_mount_check.rc != 0
+
+    # -------------------------------------------------------------------------
+    # Local & Shared Directory Synchronizations
+    # -------------------------------------------------------------------------
+    - name: Backup local /home/shawn to local external storage
+      ansible.builtin.command:
+        cmd: >-
+          rsync -ah --delete-after --append-verify
+          /home/shawn/ {{ source_mount }}/omv_bkup/home/shawn/
+      register: home_sync_res
+      changed_when: true
+
+    - name: Synchronize data shares to target host (192.168.4.5)
+      ansible.builtin.command:
+        cmd: >-
+          rsync -ah {{ item.extra_opts }} -e "ssh -i {{ ssh_key }} -o StrictHostKeyChecking=accept-new"
+          --delete-after --append-verify
+          {{ item.src }} {{ target_user }}@{{ target_host }}:{{ item.dest }}
+      loop: "{{ sync_shares }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: shares_sync_res
+      changed_when: true
+
+    # -------------------------------------------------------------------------
+    # Immich Stack Backup (Stop -> Sync DB -> Start -> Sync Photos)
+    # -------------------------------------------------------------------------
+    - name: Immich database and library backup block
+      block:
+        - name: Check if Immich compose directory exists
+          ansible.builtin.stat:
+            path: "{{ immich_dir }}"
+          register: immich_dir_stat
+
+        - name: Gracefully stop Immich docker compose stack
+          when: immich_dir_stat.stat.exists | default(false)
+          ansible.builtin.command:
+            cmd: docker compose down
+            chdir: "{{ immich_dir }}"
+          changed_when: true
+          register: immich_stopped
+
+        - name: Synchronize Immich Postgres database directory
+          ansible.builtin.command:
+            cmd: >-
+              rsync -ah -e "ssh -i {{ ssh_key }} -o StrictHostKeyChecking=accept-new"
+              --delete-after --append-verify --checksum
+              {{ source_mount }}/immich/postgres/
+              {{ target_user }}@{{ target_host }}:{{ target_mount }}/immich/postgres/
+          changed_when: true
+
+        - name: Restart Immich docker compose stack
+          when: immich_stopped is defined and immich_stopped is not skipped
+          ansible.builtin.command:
+            cmd: docker compose up -d
+            chdir: "{{ immich_dir }}"
+          changed_when: true
+          register: immich_restarted
+
+        - name: Synchronize Immich photo library assets
+          ansible.builtin.command:
+            cmd: >-
+              rsync -ah -e "ssh -i {{ ssh_key }} -o StrictHostKeyChecking=accept-new"
+              --delete-after --append-verify
+              {{ source_mount }}/immich/library/
+              {{ target_user }}@{{ target_host }}:{{ target_mount }}/immich/library/
+          changed_when: true
+
+      always:
+        - name: Recover Immich stack if backup failed before restart
+          when: (immich_stopped is defined and immich_stopped is not skipped) and (immich_restarted is not defined or immich_restarted is failed)
+          ansible.builtin.command:
+            cmd: docker compose up -d
+            chdir: "{{ immich_dir }}"
+          changed_when: false
+          failed_when: false
+
+    # -------------------------------------------------------------------------
+    # Logging & Audit Record
+    # -------------------------------------------------------------------------
+    - name: Record backup completion timestamp to log
+      ansible.builtin.shell:
+        cmd: "date >> {{ log_dir }}/date && echo \"Ansible data backup completed successfully at $(date)\" >> {{ log_dir }}/backup.log"
+      changed_when: true
