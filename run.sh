@@ -71,47 +71,58 @@ if [ ! -d "${VENV_DIR}" ] || ! "${VENV_DIR}/bin/python3" --version >/dev/null 2>
   "${VENV_DIR}/bin/pip" install -r "${SCRIPT_DIR}/requirements.txt"
 fi
 
-ANSIBLE_PLAYBOOK="${VENV_DIR}/bin/ansible-playbook"
-ANSIBLE="${VENV_DIR}/bin/ansible"
+ANSIBLE_ARGS=()
+if [ -f "${SCRIPT_DIR}/.vault_pass" ]; then
+  ANSIBLE_ARGS+=(--vault-password-file "${SCRIPT_DIR}/.vault_pass")
+fi
+
+ANSIBLE_PLAYBOOK=("${VENV_DIR}/bin/ansible-playbook" "${ANSIBLE_ARGS[@]}")
+ANSIBLE=("${VENV_DIR}/bin/ansible" "${ANSIBLE_ARGS[@]}")
 
 case "${CMD}" in
   ping)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/ping.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/ping.yml" "$@"
     ;;
   backup)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/backup.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/backup.yml" "$@"
     ;;
   upgrade)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" "$@"
+    if [[ " $* " == *" --limit 192.168.4.11"* ]] || [[ " $* " == *" --limit readonly_servers"* ]]; then
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/readonly_upgrade.yml" "$@"
+    elif [[ " $* " == *" --limit 192.168.4.66"* ]] || [[ " $* " == *" --limit pikvm_servers"* ]]; then
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/pikvm_upgrade.yml" "$@"
+    else
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/upgrade.yml" "$@"
+    fi
     ;;
   upgrade-ro)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/readonly_upgrade.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/readonly_upgrade.yml" "$@"
     ;;
   upgrade-pikvm)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/pikvm_upgrade.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/pikvm_upgrade.yml" "$@"
     ;;
   upgrade-all)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade_all.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/upgrade_all.yml" "$@"
     ;;
   cleanup)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/cleanup.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/cleanup.yml" "$@"
     ;;
   migrate-var)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/migrate_var_btrfs.yml" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/migrate_var_btrfs.yml" "$@"
     ;;
   restart-vlc)
-    exec "${ANSIBLE_PLAYBOOK}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 -e "force_vlc_restart=true" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 -e "force_vlc_restart=true" "$@"
     ;;
   playbook)
-    exec "${ANSIBLE_PLAYBOOK}" "$@"
+    exec "${ANSIBLE_PLAYBOOK[@]}" "$@"
     ;;
   raw)
-    exec "${ANSIBLE}" servers -m command -a "$*"
+    exec "${ANSIBLE[@]}" servers -m command -a "$*"
     ;;
   *)
     # If the user passed a playbook file or arbitrary ansible arguments
     if [ -f "${CMD}" ]; then
-      exec "${ANSIBLE_PLAYBOOK}" "${CMD}" "$@"
+      exec "${ANSIBLE_PLAYBOOK[@]}" "${CMD}" "$@"
     else
       echo "Unknown command: ${CMD}"
       usage 1

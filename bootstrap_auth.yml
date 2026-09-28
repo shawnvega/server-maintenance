@@ -1,0 +1,91 @@
+---
+- name: Setup Passwordless Sudo and RPi5 SSH Key
+  hosts: all
+  gather_facts: false
+  tasks:
+    # -------------------------------------------------------------------------
+    # Standard Servers
+    # -------------------------------------------------------------------------
+    - name: Setup standard servers
+      when: inventory_hostname in groups['standard_servers']
+      block:
+        - name: Add RPi5 SSH key
+          ansible.posix.authorized_key:
+            user: shawn
+            state: present
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFDEAvXkOnrhDKfKF/N/G5yvEepv3JrKmnbJOkwLLJct shawn@rpi5"
+        - name: Enable passwordless sudo for shawn
+          become: true
+          ansible.builtin.copy:
+            dest: /etc/sudoers.d/shawn_nopasswd
+            content: "shawn ALL=(ALL) NOPASSWD: ALL\n"
+            mode: '0440'
+
+    # -------------------------------------------------------------------------
+    # PiKVM Servers (Arch Linux ARM, natively read-only)
+    # -------------------------------------------------------------------------
+    - name: Setup PiKVM servers
+      when: inventory_hostname in groups['pikvm_servers']
+      block:
+        - name: Mount root filesystem read-write
+          ansible.builtin.command: /usr/bin/rw
+        - name: Add RPi5 SSH key to root
+          ansible.posix.authorized_key:
+            user: root
+            state: present
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFDEAvXkOnrhDKfKF/N/G5yvEepv3JrKmnbJOkwLLJct shawn@rpi5"
+        - name: Mount root filesystem read-only
+          ansible.builtin.command: /usr/bin/ro
+
+    # -------------------------------------------------------------------------
+    # Read-Only Pi Servers (OverlayFS)
+    # -------------------------------------------------------------------------
+    - name: Setup Read-Only Pi servers
+      when: inventory_hostname in groups['readonly_servers']
+      block:
+        - name: Check overlay status
+          become: true
+          ansible.builtin.command: "raspi-config nonint get_overlay_now"
+          register: overlay_status
+          changed_when: false
+        
+        - name: Disable overlay filesystem
+          become: true
+          when: overlay_status.stdout == "0"
+          ansible.builtin.command: "raspi-config nonint do_overlayfs 1"
+          
+        - name: Reboot into Read/Write mode
+          become: true
+          when: overlay_status.stdout == "0"
+          ansible.builtin.reboot:
+            reboot_timeout: 300
+            
+        - name: Remount boot as RW
+          become: true
+          ansible.builtin.command: mount -o remount,rw /boot/firmware
+          ignore_errors: true
+          changed_when: false
+
+        - name: Add RPi5 SSH key
+          ansible.posix.authorized_key:
+            user: shawn
+            state: present
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFDEAvXkOnrhDKfKF/N/G5yvEepv3JrKmnbJOkwLLJct shawn@rpi5"
+            
+        - name: Enable passwordless sudo for shawn
+          become: true
+          ansible.builtin.copy:
+            dest: /etc/sudoers.d/shawn_nopasswd
+            content: "shawn ALL=(ALL) NOPASSWD: ALL\n"
+            mode: '0440'
+
+        - name: Re-enable overlay filesystem
+          become: true
+          when: overlay_status.stdout == "0"
+          ansible.builtin.command: "raspi-config nonint do_overlayfs 0"
+          
+        - name: Reboot into Read-Only mode
+          become: true
+          when: overlay_status.stdout == "0"
+          ansible.builtin.reboot:
+            reboot_timeout: 300
