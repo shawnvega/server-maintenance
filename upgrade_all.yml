@@ -423,7 +423,7 @@
     # Stage STD-7: Safe Automated Reboot Check (Standard Servers)
     # =============================================================
     - name: "[Standard] Evaluate and execute safe reboot if required"
-      tags: [always, reboot]
+      tags: [reboot]
       when: inventory_hostname in groups.get('standard_servers', [])
       ansible.builtin.include_tasks: tasks/safe_reboot.yml
 
@@ -433,9 +433,8 @@
         - inventory_hostname in groups.get('standard_servers', [])
         - vlc_stream_url is defined
         - (vlc_stream_url | length) > 0
-        - safe_reboot_assessment is defined
-        - safe_reboot_assessment.reboot_required | default(false) | bool
-        - safe_reboot_assessment.can_reboot | default(false) | bool
+        - server_reboot_out is defined
+        - server_reboot_out.changed | default(false)
       ansible.builtin.include_tasks: tasks/restart_vlc_stream.yml
 
     # =============================================================

@@ -255,7 +255,7 @@ if [[ -f /var/run/reboot-required ]]; then
                     reboot_blockers+=("Active Btrfs replace on ${mountpoint}")
                 fi
             fi
-        done < <(findmnt -t btrfs -n -o TARGET 2>/dev/null || true)
+        done < <(findmnt -t btrfs -n -o TARGET 2>/dev/null | sort -u || true)
     fi
 
     # 2. Check for active backup or file synchronization processes
@@ -281,7 +281,8 @@ fi
 
 if [[ $reboot_required -eq 1 ]]; then
     if [[ ${#reboot_blockers[@]} -gt 0 ]]; then
-        blockers_str=$(IFS='; '; echo "${reboot_blockers[*]}")
+        printf -v blockers_str "%s; " "${reboot_blockers[@]}"
+        blockers_str="${blockers_str%; }"
         reboot_summary="DEFERRED (Blocked by: ${blockers_str})"
         reboot_action="defer"
         log "WARNING: System reboot is required but DEFERRED due to active operations:"
@@ -326,7 +327,11 @@ log "Status summary written to: ${STATUS_FILE}"
 log "===================================================================="
 
 if [[ "${reboot_action}" == "reboot" ]]; then
-    log "Scheduling system reboot in 10 seconds..."
-    # Detach reboot so script exits cleanly, releases lock, and flushes output
-    ( sleep 10 && systemctl reboot ) >/dev/null 2>&1 &
+    log "Scheduling detached system reboot in 10 seconds..."
+    # Launch reboot outside this cgroup using a systemd transient timer or shutdown command
+    if command -v systemd-run >/dev/null 2>&1; then
+        systemd-run --on-active=10s systemctl reboot >/dev/null 2>&1 || shutdown -r +1 "Host 5 maintenance complete. Rebooting in 1 minute." >/dev/null 2>&1
+    else
+        shutdown -r +1 "Host 5 maintenance complete. Rebooting in 1 minute." >/dev/null 2>&1
+    fi
 fi

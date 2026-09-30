@@ -1,6 +1,6 @@
 ---
 - name: Evaluate reboot requirement and safety conditions
-  tags: [always, reboot]
+  tags: [reboot]
   become: true
   ansible.builtin.shell:
     cmd: |
@@ -31,7 +31,7 @@
       elif shutil.which("needs-restarting"):
           try:
               p = subprocess.run(["needs-restarting", "-r"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-              if p.returncode != 0:
+              if p.returncode == 1 or (p.returncode != 0 and "reboot is required" in (p.stdout + p.stderr).lower()):
                   result["reboot_required"] = True
                   result["reboot_reason"] = "needs-restarting -r reported core libraries or kernel updated"
           except Exception:
@@ -83,9 +83,8 @@
               try:
                   p = subprocess.run([btrfs_bin, "balance", "status", m], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
                   out = (p.stdout + "\n" + p.stderr).lower()
-                  if "is running" in out or "balance on" in out and "abort" not in out and "not in progress" not in out:
-                      if "not in progress" not in out and "no balance running" not in out:
-                          result["blockers"].append(f"Active Btrfs balance on {m}")
+                  if ("is running" in out or "balance on" in out) and "abort" not in out and "not in progress" not in out and "no balance" not in out:
+                      result["blockers"].append(f"Active Btrfs balance on {m}")
               except Exception:
                   pass
 
@@ -119,12 +118,13 @@
       except Exception:
           pass
 
-      # 5. Check system load (< 4.0)
+      # 5. Check system load (< 4.0 or safe_reboot_load_threshold)
+      reboot_load_threshold = float("{{ safe_reboot_load_threshold | default(4.0) }}")
       try:
           with open("/proc/loadavg", "r") as f:
               load_1min = float(f.read().split()[0])
-          if load_1min >= 4.0:
-              result["blockers"].append(f"System load is {load_1min:.2f} (exceeds threshold 4.0)")
+          if load_1min >= reboot_load_threshold:
+              result["blockers"].append(f"System load is {load_1min:.2f} (exceeds threshold {reboot_load_threshold})")
       except Exception:
           pass
 
@@ -138,12 +138,12 @@
   check_mode: false
 
 - name: Parse reboot assessment
-  tags: [always, reboot]
+  tags: [reboot]
   ansible.builtin.set_fact:
     safe_reboot_assessment: "{{ safe_reboot_check_raw.stdout | from_json }}"
 
 - name: Display reboot evaluation summary
-  tags: [always, reboot]
+  tags: [reboot]
   ansible.builtin.debug:
     msg: >-
       {{
@@ -163,7 +163,7 @@
           if (safe_reboot_assessment.reboot_required and not safe_reboot_assessment.can_reboot)
           else (
             [
-              "  Status: SAFE TO REBOOT (All checks passed: no Btrfs tasks, no backups, no SSH users, load < 4.0)",
+              "  Status: SAFE TO REBOOT (All checks passed: no Btrfs tasks, no backups, no SSH users, load < " ~ (safe_reboot_load_threshold | default(4.0)) ~ ")",
               "  Action: Rebooting system..."
             ]
             if (safe_reboot_assessment.reboot_required and safe_reboot_assessment.can_reboot)
@@ -190,6 +190,7 @@
     pre_reboot_delay: 5
     post_reboot_delay: 15
     reboot_timeout: 600
+  register: server_reboot_out
 
 - name: Confirm server returned online after reboot
   tags: [reboot]
