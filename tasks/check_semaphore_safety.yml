@@ -6,7 +6,10 @@
       {{ (lookup('env', 'SEMAPHORE_TASK_ID') | length > 0) or
          (lookup('env', 'SEMAPHORE') | length > 0) or
          (lookup('env', 'SEMAPHORE_PROJECT_ID') | length > 0) or
-         (running_from_semaphore | default(false) | bool) }}
+         (running_from_semaphore | default(false) | bool) or
+         ('semaphore' in (playbook_dir | default(''))) or
+         ('semaphore' in (lookup('env', 'PWD') | default(''))) }}
+
 
 - name: Check for independent Host 5 upgrade status when running in Semaphore
   tags: [always]
