@@ -103,6 +103,7 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt` for Debian/Pi OS, `dnf` for Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
 4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then rolling `docker compose up -d` with system load checks between each stack restart).
 5. **VLC Video Stream (`tags: [vlc, snap, os]`)**: Checks if VLC is already running (`pgrep -x vlc`); if not running (or if `force_vlc_restart=true` via `./run.sh restart-vlc`), launches the fullscreen background RTSP stream on `DISPLAY=:0` and verifies process execution.
+6. **Safe Automated Reboot (`tags: [reboot]`)**: Checks if a reboot is required (`/var/run/reboot-required` on Debian or `needs-restarting -r` on Fedora). If required, evaluates 4 safety conditions: (1) no active Btrfs scrub, balance, or device replace, (2) no active backup jobs (`rpi-clone`, `rsync`, `restic`), (3) no interactive SSH user sessions (`who | grep pts/`), and (4) 1-min system load < 4.0. If all checks pass, reboots safely and verifies host returns online (restarting VLC stream if configured); if any check fails, logs a detailed blocker report and cleanly defers the reboot without interrupting the pipeline (can be skipped with `--skip-tags reboot` or `-e "auto_reboot=false"`).
 
 ### Read-Only Pi Maintenance Only (`readonly_upgrade.yml` targeting `readonly_servers`)
 1. **Detect Protections**: Checks running and configured states of OverlayFS (`raspi-config nonint get_overlay_now`/`get_overlay_conf`) and Boot Write Protection (`get_bootro_now`/`get_bootro_conf`).
@@ -335,6 +336,7 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `tasks/deploy_caddy.yml`: Modular task for validating and deploying `/etc/caddy/Caddyfile` with zero-downtime reload.
 * `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
 * `tasks/restart_vlc_stream.yml`: Modular task to cleanly stop, launch, and verify persistent fullscreen VLC video stream.
+* `tasks/safe_reboot.yml`: Modular task for evaluating reboot requirement, checking Btrfs operations, backup processes, interactive SSH sessions, system load, and safely executing or deferring reboot.
 * `run.sh`: Main entrypoint for humans and automation.
 * `requirements.txt`: Python package requirements.
 * `AGENTS.md` / `CLAUDE.md`: Repository instructions and conventions for AI assistants.

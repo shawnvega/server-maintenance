@@ -55,6 +55,9 @@ Targets hosts in the `standard_servers` group (`192.168.4.4`, `192.168.4.5`, `19
 ./run.sh upgrade --tags vlc            # Restart VLC stream only (192.168.4.18)
 ./run.sh restart-vlc                   # Shortcut to restart VLC video stream
 ./run.sh upgrade --tags backup -K      # Pre-upgrade backups only
+./run.sh upgrade --tags reboot -K      # Safe reboot check & reboot only
+./run.sh upgrade --skip-tags reboot -K # Upgrade without rebooting even if required
+./run.sh upgrade -K -e "auto_reboot=false" # Disable automatic reboot globally
 ```
 
 ### C. Read-Only Raspberry Pi Maintenance Cycle

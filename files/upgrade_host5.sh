@@ -226,16 +226,84 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Step 8: Status Record & Metrics Generation
+# Step 8: Safe Automated Reboot Evaluation
+# -----------------------------------------------------------------------------
+CURRENT_STEP="Safe automated reboot evaluation"
+reboot_required=0
+reboot_blockers=()
+
+if [[ -f /var/run/reboot-required ]]; then
+    reboot_required=1
+    log "Reboot is required by OS packages. Evaluating safety conditions..."
+
+    # 1. Check for active Btrfs operations (scrub, balance, replace)
+    if command -v btrfs >/dev/null 2>&1; then
+        while IFS= read -r mountpoint; do
+            if [[ -n "$mountpoint" ]]; then
+                # Scrub
+                if btrfs scrub status "$mountpoint" 2>&1 | grep -iqE "is running|status: running"; then
+                    reboot_blockers+=("Active Btrfs scrub on ${mountpoint}")
+                fi
+                # Balance
+                balance_out=$(btrfs balance status "$mountpoint" 2>&1 || true)
+                if echo "$balance_out" | grep -iqE "is running|balance on" && ! echo "$balance_out" | grep -iqE "not in progress|no balance running|abort"; then
+                    reboot_blockers+=("Active Btrfs balance on ${mountpoint}")
+                fi
+                # Replace
+                replace_out=$(btrfs replace status "$mountpoint" 2>&1 || true)
+                if echo "$replace_out" | grep -iqE "started|running" && ! echo "$replace_out" | grep -iqE "never started|finished|canceled"; then
+                    reboot_blockers+=("Active Btrfs replace on ${mountpoint}")
+                fi
+            fi
+        done < <(findmnt -t btrfs -n -o TARGET 2>/dev/null || true)
+    fi
+
+    # 2. Check for active backup or file synchronization processes
+    for proc in rpi-clone rsync restic; do
+        if pgrep -x "$proc" >/dev/null 2>&1; then
+            pids=$(pgrep -x "$proc" | tr '\n' ' ')
+            reboot_blockers+=("Active backup process '${proc}' (PID: ${pids})")
+        fi
+    done
+
+    # 3. Check for active interactive SSH user sessions
+    if who 2>/dev/null | grep -q 'pts/'; then
+        pts_session=$(who | grep 'pts/' | head -n 1)
+        reboot_blockers+=("Active interactive user session: ${pts_session}")
+    fi
+
+    # 4. Check system load (< 4.0)
+    current_reboot_load=$(awk '{print $1}' /proc/loadavg)
+    if ! awk -v load="${current_reboot_load}" -v thresh="4.0" 'BEGIN {exit !(load < thresh)}'; then
+        reboot_blockers+=("System load ${current_reboot_load} >= 4.0")
+    fi
+fi
+
+if [[ $reboot_required -eq 1 ]]; then
+    if [[ ${#reboot_blockers[@]} -gt 0 ]]; then
+        blockers_str=$(IFS='; '; echo "${reboot_blockers[*]}")
+        reboot_summary="DEFERRED (Blocked by: ${blockers_str})"
+        reboot_action="defer"
+        log "WARNING: System reboot is required but DEFERRED due to active operations:"
+        for b in "${reboot_blockers[@]}"; do
+            log "  - ${b}"
+        done
+    else
+        reboot_summary="REBOOTING NOW (Safety checks passed: Btrfs clean, backups clean, load ${current_reboot_load} < 4.0)"
+        reboot_action="reboot"
+        log "NOTICE: Reboot is required and all safety checks passed. System will reboot in 10s."
+    fi
+else
+    reboot_summary="No (System is up to date)"
+    reboot_action="none"
+fi
+
+# -----------------------------------------------------------------------------
+# Step 9: Status Record & Metrics Generation
 # -----------------------------------------------------------------------------
 END_TIME=$(date +%s)
 DURATION=$(( END_TIME - START_TIME ))
 DURATION_FMT="$(( DURATION / 60 ))m $(( DURATION % 60 ))s"
-
-reboot_required="No"
-if [[ -f /var/run/reboot-required ]]; then
-    reboot_required="YES (Kernel or core packages updated)"
-fi
 
 log "Writing status record to ${STATUS_FILE}..."
 cat << EOF > "${STATUS_FILE}"
@@ -246,7 +314,7 @@ Backup:         ${backup_status}
 OS Packages:    ${upgradable_count} packages upgraded
 Docker Stacks:  glances, immich-ml, semaphore updated
 Caddy:          ${caddy_status}
-Reboot Needed:  ${reboot_required}
+Reboot Needed:  ${reboot_summary}
 Log File:       ${LOG_FILE}
 EOF
 
@@ -256,3 +324,9 @@ log "===================================================================="
 log "Maintenance completed successfully in ${DURATION_FMT}!"
 log "Status summary written to: ${STATUS_FILE}"
 log "===================================================================="
+
+if [[ "${reboot_action}" == "reboot" ]]; then
+    log "Scheduling system reboot in 10 seconds..."
+    # Detach reboot so script exits cleanly, releases lock, and flushes output
+    ( sleep 10 && systemctl reboot ) >/dev/null 2>&1 &
+fi

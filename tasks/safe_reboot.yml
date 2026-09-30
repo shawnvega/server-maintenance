@@ -1,0 +1,201 @@
+---
+- name: Evaluate reboot requirement and safety conditions
+  tags: [always, reboot]
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      python3 - << 'EOF'
+      import sys, os, subprocess, json, re, shutil
+
+      result = {
+          "reboot_required": False,
+          "reboot_reason": "",
+          "can_reboot": True,
+          "blockers": []
+      }
+
+      # 1. Check if reboot is required
+      if os.path.exists("/var/run/reboot-required"):
+          result["reboot_required"] = True
+          reason = "/var/run/reboot-required exists"
+          pkgs_file = "/var/run/reboot-required.pkgs"
+          if os.path.exists(pkgs_file):
+              try:
+                  with open(pkgs_file, "r") as f:
+                      pkgs = [l.strip() for l in f.readlines() if l.strip()]
+                  if pkgs:
+                      reason += f" ({', '.join(pkgs[:5])}{'...' if len(pkgs) > 5 else ''})"
+              except Exception:
+                  pass
+          result["reboot_reason"] = reason
+      elif shutil.which("needs-restarting"):
+          try:
+              p = subprocess.run(["needs-restarting", "-r"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+              if p.returncode != 0:
+                  result["reboot_required"] = True
+                  result["reboot_reason"] = "needs-restarting -r reported core libraries or kernel updated"
+          except Exception:
+              pass
+
+      # If reboot is not required, exit early
+      if not result["reboot_required"]:
+          print(json.dumps(result))
+          sys.exit(0)
+
+      # 2. Check for active Btrfs operations (scrub, balance, replace)
+      btrfs_bin = shutil.which("btrfs") or "/usr/bin/btrfs"
+      if os.path.exists(btrfs_bin) or shutil.which("btrfs"):
+          mounts = set()
+          findmnt_bin = shutil.which("findmnt") or "/usr/bin/findmnt"
+          if os.path.exists(findmnt_bin) or shutil.which("findmnt"):
+              try:
+                  p = subprocess.run(
+                      [findmnt_bin, "--list", "--noheadings", "--output", "TARGET", "--types", "btrfs"],
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10
+                  )
+                  for line in p.stdout.splitlines():
+                      m = line.strip()
+                      if m:
+                          mounts.add(m)
+              except Exception:
+                  pass
+          if not mounts and os.path.exists("/proc/mounts"):
+              try:
+                  with open("/proc/mounts", "r") as f:
+                      for line in f:
+                          parts = line.split()
+                          if len(parts) >= 3 and parts[2] == "btrfs":
+                              mounts.add(parts[1])
+              except Exception:
+                  pass
+
+          for m in sorted(mounts):
+              # Check scrub
+              try:
+                  p = subprocess.run([btrfs_bin, "scrub", "status", m], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+                  out = (p.stdout + "\n" + p.stderr).lower()
+                  if "is running" in out or "status: running" in out:
+                      result["blockers"].append(f"Active Btrfs scrub on {m}")
+              except Exception:
+                  pass
+
+              # Check balance
+              try:
+                  p = subprocess.run([btrfs_bin, "balance", "status", m], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+                  out = (p.stdout + "\n" + p.stderr).lower()
+                  if "is running" in out or "balance on" in out and "abort" not in out and "not in progress" not in out:
+                      if "not in progress" not in out and "no balance running" not in out:
+                          result["blockers"].append(f"Active Btrfs balance on {m}")
+              except Exception:
+                  pass
+
+              # Check device replace
+              try:
+                  p = subprocess.run([btrfs_bin, "replace", "status", m], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+                  out = (p.stdout + "\n" + p.stderr).lower()
+                  if "started" in out or "running" in out:
+                      if "never started" not in out and "finished" not in out and "canceled" not in out:
+                          result["blockers"].append(f"Active Btrfs replace on {m}")
+              except Exception:
+                  pass
+
+      # 3. Check for active backups or file synchronization processes
+      backup_procs = ["rpi-clone", "rsync", "restic"]
+      for proc in backup_procs:
+          try:
+              p = subprocess.run(["pgrep", "-x", proc], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+              if p.returncode == 0:
+                  pids = p.stdout.strip().splitlines()
+                  result["blockers"].append(f"Active backup process '{proc}' (PID: {', '.join(pids[:3])})")
+          except Exception:
+              pass
+
+      # 4. Check for active interactive SSH sessions
+      try:
+          p = subprocess.run(["who"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+          pts_sessions = [l.strip() for l in p.stdout.splitlines() if "pts/" in l]
+          if pts_sessions:
+              result["blockers"].append(f"Active interactive SSH user session: {pts_sessions[0]}")
+      except Exception:
+          pass
+
+      # 5. Check system load (< 4.0)
+      try:
+          with open("/proc/loadavg", "r") as f:
+              load_1min = float(f.read().split()[0])
+          if load_1min >= 4.0:
+              result["blockers"].append(f"System load is {load_1min:.2f} (exceeds threshold 4.0)")
+      except Exception:
+          pass
+
+      if result["blockers"]:
+          result["can_reboot"] = False
+
+      print(json.dumps(result))
+      EOF
+  register: safe_reboot_check_raw
+  changed_when: false
+  check_mode: false
+
+- name: Parse reboot assessment
+  tags: [always, reboot]
+  ansible.builtin.set_fact:
+    safe_reboot_assessment: "{{ safe_reboot_check_raw.stdout | from_json }}"
+
+- name: Display reboot evaluation summary
+  tags: [always, reboot]
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        [
+          "--------------------------------------------------------------------------------",
+          "REBOOT EVALUATION FOR " ~ inventory_hostname ~ ":",
+          "  Reboot Required: " ~ ('YES (' ~ safe_reboot_assessment.reboot_reason ~ ')' if safe_reboot_assessment.reboot_required else 'No')
+        ]
+        +
+        (
+          [
+            "  Status: REBOOT DEFERRED (Safe reboot checks failed)",
+            "  Blocking Operations:"
+          ]
+          +
+          (safe_reboot_assessment.blockers | map('regex_replace', '^', '    - ') | list)
+          if (safe_reboot_assessment.reboot_required and not safe_reboot_assessment.can_reboot)
+          else (
+            [
+              "  Status: SAFE TO REBOOT (All checks passed: no Btrfs tasks, no backups, no SSH users, load < 4.0)",
+              "  Action: Rebooting system..."
+            ]
+            if (safe_reboot_assessment.reboot_required and safe_reboot_assessment.can_reboot)
+            else [
+              "  Status: No reboot required. System is up to date."
+            ]
+          )
+        )
+        +
+        [
+          "--------------------------------------------------------------------------------"
+        ]
+      }}
+
+- name: Reboot server safely when required and unblocked
+  tags: [reboot]
+  when:
+    - safe_reboot_assessment.reboot_required | bool
+    - safe_reboot_assessment.can_reboot | bool
+    - auto_reboot | default(true) | bool
+  become: true
+  ansible.builtin.reboot:
+    msg: "Rebooting safely after system updates (Btrfs clean, backups clean, load < 4.0)"
+    pre_reboot_delay: 5
+    post_reboot_delay: 15
+    reboot_timeout: 600
+
+- name: Confirm server returned online after reboot
+  tags: [reboot]
+  when:
+    - safe_reboot_assessment.reboot_required | bool
+    - safe_reboot_assessment.can_reboot | bool
+    - auto_reboot | default(true) | bool
+  ansible.builtin.debug:
+    msg: "Host {{ inventory_hostname }} rebooted safely and successfully returned online."
