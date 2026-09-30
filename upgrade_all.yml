@@ -115,7 +115,15 @@
       changed_when: false
 
     # =============================================================
-    # Stage STD-0: Btrfs Scrub Pre-flight Safety Check
+    # Stage STD-0: Semaphore Self-Upgrade Safety Check
+    # =============================================================
+    - name: "[Standard] Verify Semaphore runner safety on 192.168.4.5"
+      tags: [always]
+      when: inventory_hostname in groups.get('standard_servers', [])
+      ansible.builtin.include_tasks: tasks/check_semaphore_safety.yml
+
+    # =============================================================
+    # Stage STD-0.5: Btrfs Scrub Pre-flight Safety Check
     # =============================================================
     - name: "[Standard] Check for active Btrfs scrub operations"
       tags: [always, scrub_check]
@@ -345,8 +353,16 @@
         - inventory_hostname in groups.get('standard_servers', [])
         - docker_stacks is defined
       loop: "{{ docker_stacks | default([]) }}"
-      ansible.builtin.command:
-        cmd: "docker compose pull"
+      ansible.builtin.shell:
+        cmd: |
+          for attempt in 1 2 3; do
+            if docker compose pull; then
+              exit 0
+            fi
+            echo "docker compose pull failed (attempt $attempt/3). Retrying in 5s..." >&2
+            sleep 5
+          done
+          exit 1
         chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
       register: docker_pull_out
       async: 900

@@ -1,0 +1,69 @@
+---
+- name: Determine if executing inside Semaphore environment
+  tags: [always]
+  ansible.builtin.set_fact:
+    is_running_in_semaphore: >-
+      {{ (lookup('env', 'SEMAPHORE_TASK_ID') | length > 0) or
+         (lookup('env', 'SEMAPHORE') | length > 0) or
+         (lookup('env', 'SEMAPHORE_PROJECT_ID') | length > 0) or
+         (running_from_semaphore | default(false) | bool) }}
+
+- name: Check for independent Host 5 upgrade status when running in Semaphore
+  tags: [always]
+  when:
+    - inventory_hostname == '192.168.4.5'
+    - is_running_in_semaphore | bool
+  become: false
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] | default('/home/shawn') }}/logs/upgrade_host5.status"
+  register: host5_status_file
+
+- name: Slurp Host 5 status record if available
+  tags: [always]
+  when:
+    - inventory_hostname == '192.168.4.5'
+    - is_running_in_semaphore | bool
+    - host5_status_file.stat is defined
+    - host5_status_file.stat.exists
+  become: false
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['user_dir'] | default('/home/shawn') }}/logs/upgrade_host5.status"
+  register: host5_status_slurp
+
+- name: Display Semaphore safety notice and last upgrade status for 192.168.4.5
+  tags: [always]
+  when:
+    - inventory_hostname == '192.168.4.5'
+    - is_running_in_semaphore | bool
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        [
+          "================================================================================",
+          "NOTICE: Running inside Semaphore on 192.168.4.5.",
+          "Skipping upgrade tasks for 192.168.4.5 to protect the active Semaphore runner.",
+          "All other cluster hosts will proceed with their full upgrade cycle.",
+          "--------------------------------------------------------------------------------",
+          "--> HOST 192.168.4.5 LAST UPGRADE REPORT:"
+        ]
+        +
+        (
+          ((host5_status_slurp.content | b64decode).splitlines())
+          if (host5_status_slurp is defined and host5_status_slurp.content is defined)
+          else [
+            "    No prior upgrade record found at ~/logs/upgrade_host5.status.",
+            "    To upgrade 192.168.4.5 independently, run upgrade_host5.sh on the host or use Mac CLI."
+          ]
+        )
+        +
+        [
+          "================================================================================"
+        ]
+      }}
+
+- name: End host execution for 192.168.4.5 to protect active Semaphore runner
+  tags: [always]
+  when:
+    - inventory_hostname == '192.168.4.5'
+    - is_running_in_semaphore | bool
+  ansible.builtin.meta: end_host

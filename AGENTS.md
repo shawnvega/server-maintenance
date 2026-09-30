@@ -221,6 +221,18 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ./run.sh scrub-btrfs --all
 ```
 
+### Host 5 (192.168.4.5) Standalone Maintenance & Semaphore Safety
+```bash
+# Check Host 5 upgrade & health status (reads /home/shawn/logs/upgrade_host5.status)
+./run.sh check-host5
+
+# Deploy standalone upgrade_host5.sh script and enable Docker live-restore on 192.168.4.5
+./run.sh deploy-host5 -K
+
+# Trigger detached standalone maintenance on 192.168.4.5 via systemd (safe for Semaphore)
+./run.sh upgrade-host5 -K
+```
+
 ### Ad-hoc Shell Execution
 ```bash
 ./run.sh raw 'uptime'
@@ -297,8 +309,12 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ## File Structure & Conventions
 * `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`, `load_threshold`, `docker_stacks`), and groups (`standard_servers`, `readonly_servers`, `pikvm_servers`, `btrfs_storage_servers`, `btrfs_servers`).
 * `ansible.cfg`: Core Ansible configuration (forks=10, inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
-* `upgrade_all.yml`: Master concurrent upgrade playbook for all 6 servers.
-* `upgrade.yml`: Native multi-stage upgrade playbook for standard servers.
+* `upgrade_all.yml`: Master concurrent upgrade playbook for all 6 servers (safely skips `192.168.4.5` when run inside Semaphore).
+* `upgrade.yml`: Native multi-stage upgrade playbook for standard servers (safely skips `192.168.4.5` when run inside Semaphore).
+* `check_host5.yml`: Lightweight status inspection playbook for Host 5 (`192.168.4.5`) in Semaphore or CLI.
+* `trigger_host5_upgrade.yml`: Detached fire-and-forget playbook to run `upgrade_host5.sh` via systemd from Semaphore.
+* `deploy_host5_maintenance.yml`: Playbook to deploy `files/upgrade_host5.sh` and enable Docker `live-restore` on `192.168.4.5`.
+* `files/upgrade_host5.sh`: Standalone native host maintenance bash script for `192.168.4.5`.
 * `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
 * `btrfs_check.yml`: Automated health inspection playbook for Btrfs filesystems, device error stats, scrub & balance status, and disk allocation.
 * `btrfs_scrub.yml`: Automated playbook to start and manage background Btrfs scrubs on storage pools with idempotent state checks and error summaries (default: `192.168.4.5`).
@@ -314,6 +330,7 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `setup_remote_backup.yml`: Playbook for configuring remote script backups and managing crontab states on `192.168.4.4`.
 * `ping.yml`: Quick connectivity verification playbook.
 * `tasks/check_btrfs_scrub.yml`: Modular task for pre-flight active Btrfs scrub detection during upgrade pipelines.
+* `tasks/check_semaphore_safety.yml`: Modular task for detecting Semaphore runner execution, displaying Host 5 status, and safely ending host execution on `192.168.4.5`.
 * `tasks/run_btrfs_scrub.yml`: Modular task for dynamic Btrfs filesystem discovery, idempotency checks, scrub lifecycle, and status reporting.
 * `tasks/deploy_caddy.yml`: Modular task for validating and deploying `/etc/caddy/Caddyfile` with zero-downtime reload.
 * `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.

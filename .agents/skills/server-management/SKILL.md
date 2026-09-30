@@ -148,6 +148,20 @@ Execute commands across all nodes or targeted servers:
 ./run.sh raw 'docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"'
 ```
 
+### I. Host 5 (192.168.4.5) Standalone Maintenance & Semaphore Safety
+When upgrade pipelines (`upgrade.yml` or `upgrade_all.yml`) are executed from Semaphore, Ansible detects the Semaphore environment and skips `192.168.4.5` (`meta: end_host`) to protect the active Semaphore container, displaying the last independent run status in the task output.
+
+```bash
+# Check Host 5 upgrade & health status (reads ~/logs/upgrade_host5.status)
+./run.sh check-host5
+
+# Deploy standalone upgrade_host5.sh script and enable Docker live-restore on 192.168.4.5
+./run.sh deploy-host5 -K
+
+# Trigger detached standalone maintenance on 192.168.4.5 via systemd
+./run.sh upgrade-host5 -K
+```
+
 ---
 
 ## 3. Failure Mitigation & Troubleshooting

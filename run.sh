@@ -23,6 +23,9 @@ usage() {
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
   echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
+  echo "  check-host5          Inspect Host 5 (192.168.4.5) standalone upgrade & health status"
+  echo "  deploy-host5         Deploy standalone upgrade script to Host 5 (192.168.4.5)"
+  echo "  upgrade-host5        Trigger detached standalone maintenance on Host 5 (192.168.4.5)"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
@@ -150,6 +153,15 @@ case "${CMD}" in
     ;;
   caddy|proxy)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/caddy.yml" "$@"
+    ;;
+  check-host5)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/check_host5.yml" "$@"
+    ;;
+  deploy-host5)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_host5_maintenance.yml" "$@"
+    ;;
+  upgrade-host5)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/trigger_host5_upgrade.yml" "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK[@]}" "$@"

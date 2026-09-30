@@ -195,6 +195,16 @@ Dedicated host playbooks are also available for Semaphore UI templates without n
 ./run.sh raw 'df -h'
 ```
 
+### 19. Host 5 (192.168.4.5) Standalone Maintenance & Semaphore Safety
+When upgrade playbooks (`upgrade.yml` or `upgrade_all.yml`) are executed from Semaphore, Ansible detects the Semaphore runner environment and automatically skips `192.168.4.5` (`meta: end_host`) to prevent killing the active runner container, while logging the status of Host 5's last independent maintenance run.
+
+Host 5 can be inspected or upgraded independently:
+```bash
+./run.sh check-host5                  # 1-click status inspection (reads ~/logs/upgrade_host5.status)
+./run.sh deploy-host5 -K              # Deploy standalone upgrade_host5.sh & enable Docker live-restore
+./run.sh upgrade-host5 -K             # Trigger detached standalone maintenance via systemd
+```
+
 ---
 
 ## Structure
@@ -216,15 +226,20 @@ Dedicated host playbooks are also available for Semaphore UI templates without n
 ├── btrfs_scrub_19.yml     # Dedicated Btrfs scrub for 192.168.4.19 (Fedora root)
 ├── btrfs_scrub_all.yml    # Btrfs scrub across all Btrfs servers concurrently
 ├── migrate_var_btrfs.yml  # Btrfs RAID 1 /var migration & eMMC reclamation playbook (192.168.4.18)
-├── upgrade.yml            # Multi-stage upgrade playbook for standard servers
+├── upgrade.yml            # Multi-stage upgrade playbook for standard servers (skips .5 in Semaphore)
+├── check_host5.yml        # Lightweight 1-click status inspection playbook for Host 5 (192.168.4.5)
+├── trigger_host5_upgrade.yml # Detached systemd trigger playbook for Host 5 maintenance
+├── deploy_host5_maintenance.yml # Playbook to deploy upgrade_host5.sh & enable Docker live-restore
 ├── readonly_upgrade.yml   # Read-Only Pi automated maintenance cycle
 ├── pikvm_upgrade.yml      # PiKVM automated maintenance & reboot cycle
 ├── upgrade_all.yml        # Concurrent master upgrade playbook (strategy: free)
 ├── files/
+│   ├── upgrade_host5.sh   # Standalone host maintenance bash script for 192.168.4.5
 │   └── caddy/
 │       └── Caddyfile      # Live reverse proxy routing configuration
 ├── tasks/
 │   ├── check_btrfs_scrub.yml    # Pre-flight active scrub detection task
+│   ├── check_semaphore_safety.yml # Semaphore runner detection & Host 5 safety skip task
 │   ├── run_btrfs_scrub.yml      # Modular Btrfs scrub execution & reporting task
 │   ├── deploy_caddy.yml         # Modular Caddy validation and reload task
 │   ├── restart_docker_stack.yml # Modular stack restart with load check

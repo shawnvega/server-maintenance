@@ -1,0 +1,83 @@
+---
+- name: Deploy standalone maintenance script and tooling to Host 5 (192.168.4.5)
+  hosts: 192.168.4.5
+  become: true
+  gather_facts: false
+
+  vars:
+    enable_cron: false
+    cron_schedule: "0 3 * * 0"  # Every Sunday at 03:00 AM
+
+  tasks:
+    - name: Ensure scripts and logs directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: shawn
+        group: shawn
+        mode: "0755"
+      loop:
+        - /home/shawn/scripts
+        - /home/shawn/logs
+
+    - name: Ensure /etc/docker directory exists
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Read existing /etc/docker/daemon.json if present
+      ansible.builtin.slurp:
+        src: /etc/docker/daemon.json
+      register: existing_daemon_json
+      failed_when: false
+
+    - name: Ensure Docker daemon live-restore is enabled
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: "{{ ((existing_daemon_json.content | default('') | b64decode | from_json) if (existing_daemon_json.content is defined and (existing_daemon_json.content | b64decode | trim | length > 0)) else {}) | combine({'live-restore': true}) | to_nice_json }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      register: docker_daemon_conf
+
+    - name: Reload Docker daemon configuration if updated
+      when: docker_daemon_conf.changed
+      ansible.builtin.systemd:
+        name: docker
+        state: reloaded
+
+    - name: Copy upgrade_host5.sh script to target host
+      ansible.builtin.copy:
+        src: files/upgrade_host5.sh
+        dest: /home/shawn/scripts/upgrade_host5.sh
+        owner: shawn
+        group: shawn
+        mode: "0750"
+
+    - name: Configure optional weekly automated maintenance cron job
+      ansible.builtin.cron:
+        name: "Weekly standalone maintenance for Host 5"
+        user: root
+        minute: "0"
+        hour: "3"
+        weekday: "0"
+        job: "/home/shawn/scripts/upgrade_host5.sh >/dev/null 2>&1"
+        state: "{{ 'present' if enable_cron | bool else 'absent' }}"
+
+    - name: Verify script installation
+      ansible.builtin.command:
+        cmd: "bash -n /home/shawn/scripts/upgrade_host5.sh"
+      register: script_verify
+      changed_when: false
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "================================================================================"
+          - "Host 5 maintenance script deployed successfully to /home/shawn/scripts/upgrade_host5.sh"
+          - "Docker live-restore: Enabled"
+          - "Automated weekly cron: {{ 'Enabled (Sunday 03:00)' if enable_cron | bool else 'Disabled (manual/Semaphore trigger)' }}"
+          - "================================================================================"

@@ -5,7 +5,14 @@
 
   tasks:
     # -------------------------------------------------------------
-    # Stage 0: Btrfs Scrub Pre-flight Safety Check
+    # Stage 0: Semaphore Self-Upgrade Safety Check
+    # -------------------------------------------------------------
+    - name: Verify Semaphore runner safety on 192.168.4.5
+      tags: [always]
+      ansible.builtin.include_tasks: tasks/check_semaphore_safety.yml
+
+    # -------------------------------------------------------------
+    # Stage 0.5: Btrfs Scrub Pre-flight Safety Check
     # -------------------------------------------------------------
     - name: Check for active Btrfs scrub operations
       tags: [always, scrub_check]
@@ -207,8 +214,16 @@
     - name: Pull updated Docker images while containers stay online
       tags: [docker]
       loop: "{{ docker_stacks | default([]) }}"
-      ansible.builtin.command:
-        cmd: "docker compose pull"
+      ansible.builtin.shell:
+        cmd: |
+          for attempt in 1 2 3; do
+            if docker compose pull; then
+              exit 0
+            fi
+            echo "docker compose pull failed (attempt $attempt/3). Retrying in 5s..." >&2
+            sleep 5
+          done
+          exit 1
         chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
       register: docker_pull_out
       # Docker pulls images in background while services continue running

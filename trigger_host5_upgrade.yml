@@ -1,0 +1,46 @@
+---
+- name: Trigger detached Host 5 (192.168.4.5) maintenance via systemd
+  hosts: 192.168.4.5
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Verify upgrade script exists on target host
+      ansible.builtin.stat:
+        path: /home/shawn/scripts/upgrade_host5.sh
+      register: script_stat
+
+    - name: Fail if upgrade_host5.sh is not installed
+      when: not (script_stat.stat.exists | default(false))
+      ansible.builtin.fail:
+        msg: >-
+          /home/shawn/scripts/upgrade_host5.sh does not exist on 192.168.4.5.
+          Deploy it first using deploy_host5_maintenance.yml.
+
+    - name: Reset previous failed unit state if any
+      ansible.builtin.command:
+        cmd: "systemctl reset-failed host5-upgrade.service"
+      failed_when: false
+      changed_when: false
+
+    - name: Launch detached host upgrade via systemd-run
+      ansible.builtin.command:
+        cmd: >-
+          systemd-run --unit=host5-upgrade
+          --description="Host 5 Standalone Upgrade & Maintenance"
+          /home/shawn/scripts/upgrade_host5.sh
+      register: systemd_run_out
+      changed_when: true
+
+    - name: Display confirmation
+      ansible.builtin.debug:
+        msg:
+          - "================================================================================"
+          - "SUCCESS: Host 5 maintenance launched independently via systemd!"
+          - "Systemd Unit:  host5-upgrade"
+          - "Status File:   /home/shawn/logs/upgrade_host5.status"
+          - "Log File:      /home/shawn/logs/upgrade_host5.log"
+          - "Semaphore container will restart safely without terminating this task."
+          - "To monitor execution live from CLI:"
+          - "  ssh shawn@192.168.4.5 'journalctl -u host5-upgrade -f'"
+          - "================================================================================"

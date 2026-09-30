@@ -1,0 +1,58 @@
+---
+- name: Inspect Host 5 (192.168.4.5) maintenance and upgrade status
+  hosts: 192.168.4.5
+  gather_facts: false
+
+  tasks:
+    - name: Fetch system uptime and load average
+      ansible.builtin.shell:
+        cmd: "uptime -p; echo 'Load average:'; awk '{print $1, $2, $3}' /proc/loadavg"
+      register: uptime_load_out
+      changed_when: false
+
+    - name: Check if system reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_req_stat
+
+    - name: Check for Host 5 upgrade status record
+      ansible.builtin.stat:
+        path: /home/shawn/logs/upgrade_host5.status
+      register: status_file_stat
+
+    - name: Slurp Host 5 status record
+      when:
+        - status_file_stat.stat is defined
+        - status_file_stat.stat.exists
+      ansible.builtin.slurp:
+        src: /home/shawn/logs/upgrade_host5.status
+      register: status_slurp
+
+    - name: Display Host 5 status report
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            [
+              "================================================================================",
+              "HOST 192.168.4.5 MAINTENANCE & HEALTH STATUS",
+              "================================================================================",
+              "Uptime: " ~ (uptime_load_out.stdout_lines[0] | default('unknown')),
+              "Current Load: " ~ (uptime_load_out.stdout_lines[2] | default('unknown')),
+              "Reboot Required: " ~ ('YES (/var/run/reboot-required exists)' if (reboot_req_stat.stat is defined and reboot_req_stat.stat.exists) else 'No'),
+              "--------------------------------------------------------------------------------",
+              "--> LAST UPGRADE EXECUTION RECORD:"
+            ]
+            +
+            (
+              ((status_slurp.content | b64decode).splitlines())
+              if (status_slurp is defined and status_slurp.content is defined)
+              else [
+                "    No status record found at /home/shawn/logs/upgrade_host5.status.",
+                "    Host has not yet run upgrade_host5.sh."
+              ]
+            )
+            +
+            [
+              "================================================================================"
+            ]
+          }}
