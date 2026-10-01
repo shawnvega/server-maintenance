@@ -162,9 +162,9 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 
 ### 15. Btrfs Filesystem Health & Device Checks
 ```bash
-./run.sh check-btrfs                     # Check Btrfs health on storage servers (192.168.4.4 & 192.168.4.5)
+./run.sh check-btrfs                     # Check Btrfs health across all Btrfs servers (.4, .5, .18, .19)
 ./run.sh check-btrfs --limit 192.168.4.18 # Check Btrfs on specific host
-./run.sh check-btrfs -e target_hosts=btrfs_servers # Check across all Btrfs hosts
+./run.sh check-btrfs -e target_hosts=btrfs_storage_servers # Check storage servers only (.4 & .5)
 ```
 
 ### 16. Btrfs Scrub Operations

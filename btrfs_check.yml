@@ -1,6 +1,6 @@
 ---
 - name: Inspect Btrfs filesystems and verify device health
-  hosts: "{{ target_hosts | default('btrfs_storage_servers') }}"
+  hosts: "{{ target_hosts | default('btrfs_servers') }}"
   become: true
   gather_facts: false
 
@@ -11,14 +11,32 @@
     - name: Query Btrfs filesystem status and health metrics
       ansible.builtin.shell: |
         python3 - << 'EOF'
-        import json, subprocess
+        import json, os, shutil, subprocess, sys
 
         def run(cmd):
             p = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             return p.stdout.strip(), p.stderr.strip(), p.returncode
 
-        findmnt_out, _, _ = run("findmnt --list --all --canonicalize --notruncate --nofsroot --uniq --noheadings --output TARGET,UUID,LABEL --types btrfs")
-        lines = [l.strip() for l in findmnt_out.splitlines() if l.strip()]
+        btrfs_bin = shutil.which("btrfs") or "/usr/bin/btrfs"
+        if not shutil.which("btrfs") and not os.path.exists(btrfs_bin):
+            print(json.dumps([]))
+            sys.exit(0)
+
+        findmnt_bin = shutil.which("findmnt") or "/usr/bin/findmnt"
+        lines = []
+        if shutil.which("findmnt") or os.path.exists(findmnt_bin):
+            findmnt_out, _, _ = run(f"{findmnt_bin} --list --all --canonicalize --notruncate --nofsroot --uniq --noheadings --output TARGET,UUID,LABEL --types btrfs")
+            lines = [l.strip() for l in findmnt_out.splitlines() if l.strip()]
+
+        if not lines:
+            try:
+                with open("/proc/mounts", "r") as f:
+                    for l in f:
+                        p = l.split()
+                        if len(p) >= 3 and p[2] == "btrfs":
+                            lines.append(f"{p[1]} unknown")
+            except Exception:
+                pass
 
         seen_uuids = set()
         filesystems = []
@@ -29,16 +47,21 @@
                 continue
             target = parts[0]
             uuid = parts[1] if len(parts) > 1 else "unknown"
-            label = parts[2] if len(parts) > 2 else ""
+            label = " ".join(parts[2:]) if len(parts) > 2 else ""
 
-            if uuid in seen_uuids:
+            dedup_key = uuid if (uuid and uuid != "unknown") else target
+            if dedup_key in seen_uuids:
                 continue
-            seen_uuids.add(uuid)
+            seen_uuids.add(dedup_key)
 
-            usage, _, _ = run(f"btrfs filesystem usage -T {target}")
-            dev_stats, _, _ = run(f"btrfs device stats {target}")
-            scrub, _, _ = run(f"btrfs scrub status {target}")
-            balance, _, _ = run(f"btrfs balance status {target}")
+            usage_out, usage_err, _ = run(f"{btrfs_bin} filesystem usage -T {target}")
+            usage = usage_out if usage_out else usage_err
+            dev_stats_out, dev_stats_err, _ = run(f"{btrfs_bin} device stats {target}")
+            dev_stats = dev_stats_out if dev_stats_out else dev_stats_err
+            scrub_out, scrub_err, _ = run(f"{btrfs_bin} scrub status {target}")
+            scrub = scrub_out if scrub_out else scrub_err
+            balance_out, balance_err, _ = run(f"{btrfs_bin} balance status {target}")
+            balance = balance_out if balance_out else balance_err
 
             errors = []
             for s in dev_stats.splitlines():

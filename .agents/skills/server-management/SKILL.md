@@ -109,14 +109,14 @@ Run hardware block backups or data share synchronizations:
 ### F. Btrfs Filesystem Health & Device Inspection
 Inspect Btrfs storage pools, device I/O error stats, scrub status, balance status, and disk allocation:
 ```bash
-# Check Btrfs health on primary storage servers (192.168.4.4 & 192.168.4.5)
+# Check Btrfs health across all Btrfs-equipped hosts (192.168.4.4, .5, .18, .19)
 ./run.sh check-btrfs
 
 # Check Btrfs health on a specific server (e.g., 192.168.4.18 Btrfs RAID 1 /var)
 ./run.sh check-btrfs --limit 192.168.4.18
 
-# Check across all Btrfs-equipped hosts (192.168.4.4, .5, .18, .19)
-./run.sh check-btrfs -e target_hosts=btrfs_servers
+# Check Btrfs health on storage servers only (192.168.4.4 & 192.168.4.5)
+./run.sh check-btrfs -e target_hosts=btrfs_storage_servers
 ```
 
 ### G. Btrfs Scrub Execution & Monitoring

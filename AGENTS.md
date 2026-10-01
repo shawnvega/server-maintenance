@@ -191,14 +191,14 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 
 ### Btrfs Filesystem & Device Health Checks
 ```bash
-# Check Btrfs health on storage servers (192.168.4.4 & 192.168.4.5)
+# Check Btrfs health across all Btrfs servers (192.168.4.4, .5, .18, .19)
 ./run.sh check-btrfs
 
 # Check Btrfs health on a specific server (e.g. 192.168.4.18 Btrfs RAID 1 /var)
 ./run.sh check-btrfs --limit 192.168.4.18
 
-# Check Btrfs health across all Btrfs-equipped servers (192.168.4.4, .5, .18, .19)
-./run.sh check-btrfs -e target_hosts=btrfs_servers
+# Check Btrfs health on storage servers only (192.168.4.4 & 192.168.4.5)
+./run.sh check-btrfs -e target_hosts=btrfs_storage_servers
 ```
 
 ### Btrfs Scrub Operations
