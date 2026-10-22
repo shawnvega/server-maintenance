@@ -205,6 +205,18 @@ Host 5 can be inspected or upgraded independently:
 ./run.sh upgrade-host5 -K             # Trigger detached standalone maintenance via systemd
 ```
 
+### 20. Universal Password Update (All Servers & PiKVM)
+Securely prompts once for a new password and updates it across standard Linux servers (`shawn`), the PiKVM root account, the PiKVM Web UI `admin` account, and handles the OverlayFS RW/RO reboot cycle on `192.168.4.11`:
+```bash
+./run.sh change-password -K
+```
+
+### 21. Decommission PHP / WordPress Workloads
+Safely shuts down WordPress containers, disables auto-restart policies, closes listening ports, and hardens Caddy ingress to return 503 Service Unavailable:
+```bash
+./run.sh shutdown-php
+```
+
 ---
 
 ## Structure
@@ -218,6 +230,8 @@ Host 5 can be inspected or upgraded independently:
 ├── caddy.yml              # Dedicated playbook for native Caddy reverse proxy (192.168.4.5)
 ├── backup.yml             # Dedicated backup playbook
 ├── cleanup.yml            # Disk space cleanup & maintenance playbook
+├── change_password.yml    # Universal password update playbook (servers + PiKVM)
+├── shutdown_php.yml       # Decommission WordPress/PHP workloads & harden Caddy ingress
 ├── btrfs_check.yml        # Btrfs filesystem health, device errors & scrub/balance status
 ├── btrfs_scrub.yml        # Start & manage Btrfs scrubs (default: 192.168.4.5)
 ├── btrfs_scrub_4.yml      # Dedicated Btrfs scrub for 192.168.4.4

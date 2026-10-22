@@ -80,6 +80,7 @@
         pre_reboot_delay: 2
         post_reboot_delay: 10
         reboot_timeout: 600
+        connect_timeout: 15
 
     - name: "[RO-Pi] Verify filesystem is running in Read/Write mode"
       tags: [readonly, rw]
@@ -484,6 +485,7 @@
         pre_reboot_delay: 2
         post_reboot_delay: 10
         reboot_timeout: 600
+        connect_timeout: 15
 
     - name: "[RO-Pi] Verify root filesystem is safely back in Read-Only mode"
       tags: [readonly, ro]
@@ -562,6 +564,7 @@
         pre_reboot_delay: 2
         post_reboot_delay: 15
         reboot_timeout: 600
+        connect_timeout: 15
 
     - name: "[PiKVM] Ensure filesystems are locked in read-only mode if no reboot was required"
       tags: [pikvm, upgrade, ro]

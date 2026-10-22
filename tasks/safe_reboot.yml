@@ -190,6 +190,7 @@
     pre_reboot_delay: 5
     post_reboot_delay: 15
     reboot_timeout: 600
+    connect_timeout: 15
   register: server_reboot_out
 
 - name: Confirm server returned online after reboot

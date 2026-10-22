@@ -9,7 +9,7 @@ services:
       - /srv/dev-disk-by-uuid-572f06f7-537c-4a40-8070-1952f73f65e2/wordpress/wwwvvvega/mysql:/var/lib/mysql
     env_file:
       - .env
-    restart: always
+    restart: no
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -26,7 +26,7 @@ services:
       - .env
     ports:
       - 9999:80
-    restart: always
+    restart: no
     environment:
       - WORDPRESS_DB_HOST=db
       - WORDPRESS_DB_USER=${MYSQL_USER}

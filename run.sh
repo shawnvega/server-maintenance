@@ -23,9 +23,11 @@ usage() {
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
   echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
+  echo "  shutdown-php         Decommission and shut down WordPress & PHP workloads"
   echo "  check-host5          Inspect Host 5 (192.168.4.5) standalone upgrade & health status"
   echo "  deploy-host5         Deploy standalone upgrade script to Host 5 (192.168.4.5)"
   echo "  upgrade-host5        Trigger detached standalone maintenance on Host 5 (192.168.4.5)"
+  echo "  change-password      Change login password on all servers and PiKVM admin"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
   echo ""
@@ -57,6 +59,7 @@ usage() {
   echo "  $0 upgrade --tags docker           # Docker containers only (minimal downtime)"
   echo "  $0 upgrade --skip-tags backup -K   # Skip backup and run OS + Docker upgrades"
   echo "  $0 upgrade --limit 192.168.4.4 -K  # Run on a single server only"
+  echo "  $0 change-password -K              # Change password across all servers and PiKVM"
   echo "  $0 raw 'uptime'"
   exit "${exit_code}"
 }
@@ -155,6 +158,9 @@ case "${CMD}" in
   caddy|proxy)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/caddy.yml" "$@"
     ;;
+  shutdown-php)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/shutdown_php.yml" "$@"
+    ;;
   check-host5)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/check_host5.yml" "$@"
     ;;
@@ -163,6 +169,9 @@ case "${CMD}" in
     ;;
   upgrade-host5)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/trigger_host5_upgrade.yml" "$@"
+    ;;
+  change-password|passwd)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/change_password.yml" "$@"
     ;;
   playbook)
     exec "${ANSIBLE_PLAYBOOK[@]}" "$@"

@@ -78,6 +78,7 @@
         pre_reboot_delay: 2
         post_reboot_delay: 10
         reboot_timeout: 600
+        connect_timeout: 15
 
     - name: Verify root filesystem is running in Read/Write mode
       tags: [overlay, rw]
@@ -196,6 +197,7 @@
         pre_reboot_delay: 2
         post_reboot_delay: 10
         reboot_timeout: 600
+        connect_timeout: 15
 
     - name: Verify root filesystem is safely back in Read-Only mode
       tags: [overlay, ro]

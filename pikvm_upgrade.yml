@@ -89,6 +89,7 @@
         pre_reboot_delay: 2
         post_reboot_delay: 15
         reboot_timeout: 600
+        connect_timeout: 15
 
     - name: Ensure filesystems are locked in read-only mode if no reboot was required
       tags: [upgrade, pikvm, ro]

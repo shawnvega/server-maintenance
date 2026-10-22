@@ -1,0 +1,108 @@
+---
+- name: Shutdown and Decommission WordPress Workloads (PHP2Shell Mitigation)
+  hosts: standard_servers
+  gather_facts: true
+
+  tasks:
+    - name: Detect any running WordPress containers
+      ansible.builtin.shell: |
+        docker ps -q --filter "ancestor=wordpress"
+      register: running_wp_containers
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Display running WordPress containers found
+      ansible.builtin.debug:
+        msg: "Active WordPress containers on {{ inventory_hostname }}: {{ running_wp_containers.stdout_lines }}"
+      when: running_wp_containers.stdout != ""
+
+    # Disable restart policy in compose files to prevent any auto-restart
+    - name: Set restart policy to 'no' in tps-wordpress compose file on Host 5
+      when: inventory_hostname == '192.168.4.5'
+      ansible.builtin.replace:
+        path: /srv/dev-disk-by-uuid-d7778731-7a07-413e-bac5-badb6d74aaff/tps-wordpress/docker-compose.yml
+        regexp: 'restart:\s*always'
+        replace: 'restart: "no"'
+      failed_when: false
+
+    - name: Set restart policy to 'no' in wordpress-www.vvvega compose file
+      ansible.builtin.replace:
+        path: "{{ ansible_facts['user_dir'] }}/docker/wordpress-www.vvvega/docker-compose.yml"
+        regexp: 'restart:\s*always'
+        replace: 'restart: "no"'
+      failed_when: false
+
+    # Stop compose stacks if present
+    - name: Bring down tps-wordpress compose stack on Host 5
+      when: inventory_hostname == '192.168.4.5'
+      ansible.builtin.shell: |
+        if [ -d "/srv/dev-disk-by-uuid-d7778731-7a07-413e-bac5-badb6d74aaff/tps-wordpress" ]; then
+          cd "/srv/dev-disk-by-uuid-d7778731-7a07-413e-bac5-badb6d74aaff/tps-wordpress" && docker compose down
+        fi
+      register: tps_down
+      changed_when: "'Stopping' in tps_down.stdout or 'Removing' in tps_down.stdout"
+      failed_when: false
+
+    - name: Bring down wordpress-www.vvvega compose stack
+      ansible.builtin.shell: |
+        if [ -d "{{ ansible_facts['user_dir'] }}/docker/wordpress-www.vvvega" ]; then
+          cd "{{ ansible_facts['user_dir'] }}/docker/wordpress-www.vvvega" && docker compose down
+        fi
+      register: wp_down
+      changed_when: "'Stopping' in wp_down.stdout or 'Removing' in wp_down.stdout"
+      failed_when: false
+
+    # Forcibly stop and remove any remaining WordPress containers
+    - name: Forcibly stop and remove any lingering WordPress containers
+      ansible.builtin.shell: |
+        wp_ids=$(docker ps -aq --filter "ancestor=wordpress")
+        if [ -n "$wp_ids" ]; then
+          docker rm -f $wp_ids
+        fi
+      register: force_cleanup
+      changed_when: force_cleanup.stdout != ""
+      failed_when: false
+
+    # Verify listening ports
+    - name: Verify WordPress port 8080 is closed on Host 5
+      when: inventory_hostname == '192.168.4.5'
+      ansible.builtin.shell: |
+        ss -tulpn | grep -q ':8080 ' && echo "open" || echo "closed"
+      register: port_8080_status
+      failed_when: port_8080_status.stdout | trim != 'closed'
+      changed_when: false
+
+    - name: Verify WordPress port 9999 is closed on Host 4
+      when: inventory_hostname == '192.168.4.4'
+      ansible.builtin.shell: |
+        ss -tulpn | grep -q ':9999 ' && echo "open" || echo "closed"
+      register: port_9999_status
+      failed_when: port_9999_status.stdout | trim != 'closed'
+      changed_when: false
+
+    - name: Confirm no WordPress containers are running
+      ansible.builtin.shell: |
+        docker ps -q --filter "ancestor=wordpress"
+      register: wp_check
+      failed_when: wp_check.stdout != ""
+      changed_when: false
+
+    - name: Status confirmation
+      ansible.builtin.debug:
+        msg: "Host {{ inventory_hostname }}: All WordPress workloads are shut down, restart policies disabled, and ports closed."
+
+- name: Harden Caddy Reverse Proxy Ingress
+  hosts: 192.168.4.5
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Deploy hardened Caddy configuration
+      ansible.builtin.include_tasks: tasks/deploy_caddy.yml
+
+  handlers:
+    - name: Reload Caddy
+      ansible.builtin.systemd:
+        name: caddy
+        state: reloaded

@@ -234,6 +234,18 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 ./run.sh upgrade-host5 -K
 ```
 
+### Universal Password Management
+```bash
+# Update user password across all servers (shawn), PiKVM root, and PiKVM Web UI admin
+./run.sh change-password -K
+```
+
+### Decommission PHP / WordPress Workloads
+```bash
+# Decommission and shut down WordPress workloads, close ports, and harden Caddy ingress
+./run.sh shutdown-php
+```
+
 ### Ad-hoc Shell Execution
 ```bash
 ./run.sh raw 'uptime'
@@ -317,6 +329,8 @@ Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
 * `deploy_host5_maintenance.yml`: Playbook to deploy `files/upgrade_host5.sh` and enable Docker `live-restore` on `192.168.4.5`.
 * `files/upgrade_host5.sh`: Standalone native host maintenance bash script for `192.168.4.5`.
 * `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
+* `change_password.yml`: Automated password update playbook across all standard servers, PiKVM root/admin, and OverlayFS Pi.
+* `shutdown_php.yml`: Playbook to decommission WordPress/PHP workloads, close ports, disable auto-restart, and harden Caddy ingress.
 * `btrfs_check.yml`: Automated health inspection playbook for Btrfs filesystems, device error stats, scrub & balance status, and disk allocation.
 * `btrfs_scrub.yml`: Automated playbook to start and manage background Btrfs scrubs on storage pools with idempotent state checks and error summaries (default: `192.168.4.5`).
 * `btrfs_scrub_4.yml`, `btrfs_scrub_5.yml`, `btrfs_scrub_18.yml`, `btrfs_scrub_19.yml`: Dedicated host playbooks for starting Btrfs scrub on specific nodes (ideal for Semaphore UI task templates).
