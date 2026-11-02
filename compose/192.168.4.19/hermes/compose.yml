@@ -1,0 +1,56 @@
+services:
+  gateway:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-gateway
+    restart: unless-stopped
+    command: ["gateway", "run"]
+    shm_size: "1gb"
+    mem_limit: 2560m
+    mem_reservation: 1024m
+    cpus: 1.5
+    ports:
+      - "9119:9119"
+    environment:
+      - HERMES_UID=1000
+      - HERMES_GID=1000
+      - HERMES_DASHBOARD=1
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_PORT=9119
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_USERNAME:-admin}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_PASSWORD:-hermesadmin}
+      - OPENAI_BASE_URL=http://192.168.4.8:4000/v1
+      - OPENAI_API_KEY=${LITELLM_API_KEY:-sk-hermes-mac-secret}
+      - MODEL_NAME=${HERMES_MODEL:-ollama/gemma4:26b-mlx-code}
+    volumes:
+      - /home/shawn/docker/hermes/data:/opt/data
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - hermes-net
+
+  desktop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hermes-desktop:minimal
+    container_name: hermes-desktop
+    restart: unless-stopped
+    shm_size: "1gb"
+    mem_limit: 1536m
+    mem_reservation: 512m
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "6080:6080"
+    environment:
+      - DISPLAY=:1
+      - HOME=/home/hermes
+    volumes:
+      - /home/shawn/docker/hermes/data:/home/hermes/workspace
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - hermes-net
+
+networks:
+  hermes-net:
+    driver: bridge

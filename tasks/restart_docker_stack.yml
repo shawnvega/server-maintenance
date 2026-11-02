@@ -34,6 +34,31 @@
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/docker-compose.yaml"
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yml"
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yaml"
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/Dockerfile"
+
+- name: "Check if config directory exists for {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/compose/{{ inventory_hostname }}/{{ stack_item | basename }}/config"
+  delegate_to: localhost
+  become: false
+  register: stack_config_dir_stat
+
+- name: "Sync config directory for {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/compose/{{ inventory_hostname }}/{{ stack_item | basename }}/config"
+    dest: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}/"
+    mode: '0755'
+  when: stack_config_dir_stat.stat.exists and stack_config_dir_stat.stat.isdir
+
+- name: "Ensure data workspace directory exists for hermes"
+  tags: [docker]
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/docker/hermes/data"
+    state: directory
+    mode: '0777'
+  when: (stack_item | basename) == 'hermes'
 
 - name: "Template .env file for {{ stack_item }}"
   tags: [docker]
@@ -44,11 +69,17 @@
   with_fileglob:
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/.env.j2"
 
+- name: "Check if Dockerfile exists for {{ stack_item }}"
+  tags: [docker]
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}/Dockerfile"
+  register: stack_dockerfile_stat
+
 - name: "Recreate and restart {{ stack_item }} (~2s downtime)"
   tags: [docker]
   ansible.builtin.command:
-    cmd: "docker compose up -d --remove-orphans"
+    cmd: "docker compose up -d --remove-orphans {{ '--build' if stack_dockerfile_stat.stat.exists else '' }}"
     chdir: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}"
   register: docker_up_out
-  changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout"
+  changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout or 'Building' in docker_up_out.stdout"
   failed_when: docker_up_out.rc != 0

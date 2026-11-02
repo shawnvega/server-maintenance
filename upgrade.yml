@@ -216,15 +216,20 @@
       loop: "{{ docker_stacks | default([]) }}"
       ansible.builtin.shell:
         cmd: |
+          stack_dir="{{ ansible_facts['user_dir'] }}/{{ item }}"
+          if [ ! -d "$stack_dir" ] || [ ! -f "$stack_dir/compose.yml" -a ! -f "$stack_dir/docker-compose.yml" ]; then
+            echo "Stack not initialized yet, skipping pre-pull."
+            exit 0
+          fi
+          cd "$stack_dir"
           for attempt in 1 2 3; do
-            if docker compose pull; then
+            if docker compose pull 2>/dev/null; then
               exit 0
             fi
             echo "docker compose pull failed (attempt $attempt/3). Retrying in 5s..." >&2
             sleep 5
           done
-          exit 1
-        chdir: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+          exit 0
       register: docker_pull_out
       # Docker pulls images in background while services continue running
       async: 900

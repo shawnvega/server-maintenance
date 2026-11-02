@@ -1,0 +1,16 @@
+model_list:
+  - model_name: ollama/gemma4:26b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:26b-mlx-code
+      api_base: http://127.0.0.1:11434
+  - model_name: gemma4:26b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:26b-mlx-code
+      api_base: http://127.0.0.1:11434
+  - model_name: coding-26b
+    litellm_params:
+      model: ollama_chat/gemma4:26b-mlx-code
+      api_base: http://127.0.0.1:11434
+
+general_settings:
+  master_key: "sk-hermes-mac-secret"
