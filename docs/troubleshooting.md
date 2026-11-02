@@ -228,6 +228,13 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
    ssh shawn@192.168.4.19 "docker restart hermes-gateway"
    ```
 
+5. **Context Window Mismatch (e.g. 256k instead of 128k)**:
+   If Hermes displays `coding 26b │ ... / 256k` despite configuring Ollama with `num_ctx: 131072`:
+   * Ollama reports both runtime `num_ctx: 131072` and architectural `context_length: 262144`.
+   * LiteLLM defaults to advertising the architectural limit unless overridden.
+   * Add explicit `model_info` (`max_input_tokens: 131072`, `max_output_tokens: 8192`) in `files/litellm_mac_config.yaml`.
+   * Reload LiteLLM via `launchctl` and restart `hermes-gateway`.
+
 ### Recovery
 Fix host directory permissions to `0755` (`chmod go-w`):
 ```bash
