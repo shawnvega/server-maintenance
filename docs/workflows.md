@@ -256,8 +256,8 @@ The cluster runs a centralized **Homepage** dashboard container on `192.168.4.5`
   * Clean LAN URL: `http://192.168.4.5` (routed automatically via native Caddy on port 80).
   * Direct Container Port: `http://192.168.4.5:3001`
 * **Configuration Files** (`compose/192.168.4.5/homepage/config/`):
-  * `settings.yaml`: Title, layout categories, theme, and search provider.
-  * `services.yaml`: Service tiles, icons, URLs, container mapping, and widgets (`glances` with `metric: cpu`).
+  * `settings.yaml`: Title, layout categories (Core Infrastructure, Automation & AI, Media & Storage, Monitoring), theme, and search provider.
+  * `services.yaml`: Service tiles, icons, URLs, container mapping, ping checks, and widgets (`glances` with `metric: cpu`). Includes OpenMediaVault (`192.168.4.4`), Cockpit (`192.168.4.19:9090`), all 5 Glances nodes (`.5`, `.4`, `.19`, `.18`, `.11`), and Frigate NVR (`https://192.168.4.19:8971`).
   * `widgets.yaml`: Header resources (Pi 5 CPU, memory, disk, and CPU temperature).
   * `bookmarks.yaml`: Quick link bookmarks.
   * `docker.yaml`: Local Docker socket configuration for live container status.

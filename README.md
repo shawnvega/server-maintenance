@@ -8,11 +8,11 @@ Ansible automation for managing home servers natively (load monitoring, `rpi-clo
 
 | Host | User | OS | Backup Method | Containers / Workloads | Mode |
 |---|---|---|---|---|---|
-| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
+| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `semaphore` (`:3000`, LAN only), native Caddy | Read/Write |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | `glances`, persistent VLC RTSP stream (`snap` vlc) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | `glances0`, `frigate0`, `hermes` | Read/Write |
-| `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink` | **Read-Only (OverlayFS & Boot Protection)** |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` | Read/Write |
+| `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink`, `glances` (`:61208`) | **Read-Only (OverlayFS & Boot Protection)** |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | PiKVM (`kvmd`) | **Read-Only (Native ext4/vfat ro)** |
 | `192.168.64.6` | `shawn` | Debian 13 (UTM VM) | None | `openclaw` (Gateway backed by Mac host Ollama) | Read/Write |
 | `192.168.64.9` | `shawn` | Debian 13 (UTM VM) | None | `openclaw` (Experimental Gateway backed by Mac host Ollama) | Read/Write |

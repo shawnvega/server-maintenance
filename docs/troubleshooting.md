@@ -295,3 +295,16 @@ and the countdown banner will disappear. Ensure `tasks/restart_docker_stack.yml`
 * **Symptom**: Homepage logs report `error: <dockerStatuses> Error: connect EACCES /var/run/docker.sock`.
 * **Root Cause**: On Debian/Pi OS, `/var/run/docker.sock` has group ownership `docker` (GID `990`). If Homepage runs with `PGID=1000`, it cannot read the socket.
 * **Fix**: Set `PGID=990` in `compose/192.168.4.5/homepage/docker-compose.yml`.
+
+### 5. Frigate NVR Connection Refused (`http://...:5000`)
+* **Symptom**: Clicking the Frigate tile in Homepage fails with `ERR_CONNECTION_REFUSED` or curl returns `Failed to connect port 5000: Connection refused`.
+* **Root Cause**: Frigate 0.14+ deprecates unauthenticated port 5000 ingress. The host container compose configuration maps host port `8971` with HTTPS TLS (`0.0.0.0:8971->8971/tcp`), leaving internal container port `5000` unexposed.
+* **Fix**: Configure `href: https://192.168.4.19:8971` and `ping: 192.168.4.19` in `services.yaml`.
+
+### 6. Container Failed to Start: `RWLayer of container ... is unexpectedly nil`
+* **Symptom**: Starting or restarting an existing Docker container (e.g. `glances` on Chromebook `192.168.4.18`) fails with `Error response from daemon: RWLayer of container ... is unexpectedly nil`.
+* **Root Cause**: Occurs when Docker daemon restarts, root or storage paths migrate (such as `/var` Btrfs RAID 1 migration), or overlay2/btrfs mount graph driver cache desynchronizes from container metadata.
+* **Fix**: Force recreate the container stack cleanly:
+  ```bash
+  docker compose -f /home/shawn/docker/<service>/compose.yml up -d --force-recreate
+  ```

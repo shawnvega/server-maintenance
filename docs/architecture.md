@@ -8,11 +8,11 @@ This document details the hardware, network topology, operating systems, storage
 
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
-| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
+| `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC RTSP stream (`snap` vlc) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0`, `hermes` (gateway `:9119` + desktop `:6080`) |
-| `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119` + desktop `:6080`) |
+| `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
 | `192.168.64.6` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Gateway backed by Mac host Ollama) |
 | `192.168.64.9` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Experimental Gateway backed by Mac host Ollama) |
@@ -51,6 +51,11 @@ This document details the hardware, network topology, operating systems, storage
     * Caddy native reverse proxy: Ingress on port 80 (`http://192.168.4.5`) automatically proxies to Homepage at `127.0.0.1:3001`.
   * **Permissions & Group Access**: Runs as `PUID=1000` (`shawn`) and `PGID=990` (`docker` group) to grant read-only access to `/var/run/docker.sock` for live container health badges.
   * **Configuration Source of Truth**: Managed under `compose/192.168.4.5/homepage/config/` (`services.yaml`, `widgets.yaml`, `bookmarks.yaml`, `docker.yaml`, `settings.yaml`). Deployed and reloaded via `./run.sh homepage`.
+  * **Cluster Service Catalog**:
+    * **Core Infrastructure** (4 columns): Semaphore (`:3000`), PiKVM (`https://192.168.4.66`), Cockpit (`https://192.168.4.19:9090`), Caddy Proxy (`http://192.168.4.5`).
+    * **Automation & AI** (4 columns): Hermes Desktop (`:6080`), Hermes Gateway (`:9119`), OpenClaw Gateway (`192.168.64.6:18789`), OpenClaw Exp (`192.168.64.9:18789`).
+    * **Media & Storage** (4 columns): OpenMediaVault (`http://192.168.4.4`), Immich (`https://immich.vvvega.com`), Jellyfin (`:8096`), Syncthing (`:8384`).
+    * **Monitoring** (3 columns): Glances CPU metrics across all 5 active Linux nodes (`.5`, `.4`, `.19`, `.18`, `.11`) plus Frigate NVR (`https://192.168.4.19:8971`).
 
 ### 5. Read-Only Comparison: OverlayFS Pi vs Native PiKVM
 

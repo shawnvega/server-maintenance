@@ -67,16 +67,16 @@ headerStyle: clean
 layout:
   Core Infrastructure:
     style: row
-    columns: 3
+    columns: 4
   Automation & AI:
     style: row
     columns: 4
   Media & Storage:
     style: row
-    columns: 3
+    columns: 4
   Monitoring:
     style: row
-    columns: 4
+    columns: 3
 ```
 
 ### `services.yaml`
@@ -95,10 +95,34 @@ Declares service tiles, grouping, container health tracking, and metrics:
         href: https://192.168.4.66
         description: Remote Hardware Console (Arch ARM)
         ping: 192.168.4.66
+    - Cockpit:
+        icon: cockpit.png
+        href: https://192.168.4.19:9090
+        description: Fedora Web Admin Console (Workstation)
+        ping: 192.168.4.19
     - Caddy Proxy:
         icon: caddy.png
         href: http://192.168.4.5
         description: Native Reverse Proxy & TLS (Pi 5)
+
+- Media & Storage:
+    - OpenMediaVault:
+        icon: openmediavault.png
+        href: http://192.168.4.4
+        description: Network-Attached Storage & Web Admin (Pi 4)
+        ping: 192.168.4.4
+    - Immich:
+        icon: immich.png
+        href: https://immich.vvvega.com
+        description: Photo & Video Management (Pi 4)
+    - Jellyfin:
+        icon: jellyfin.png
+        href: http://192.168.4.4:8096
+        description: Media Streaming Server (Pi 4)
+    - Syncthing:
+        icon: syncthing.png
+        href: http://192.168.4.4:8384
+        description: Peer-to-Peer File Sync (Pi 4)
 
 - Monitoring:
     - Glances Pi 5:
@@ -110,6 +134,29 @@ Declares service tiles, grouping, container health tracking, and metrics:
           url: http://192.168.4.5:61208
           version: 4
           metric: cpu
+    - Glances Chromebook:
+        icon: glances.png
+        href: http://192.168.4.18:61208
+        description: Chromebook & Btrfs Metrics (Ubuntu)
+        widget:
+          type: glances
+          url: http://192.168.4.18:61208
+          version: 4
+          metric: cpu
+    - Glances Plant Monitor:
+        icon: glances.png
+        href: http://192.168.4.11:61208
+        description: E-Ink Display & System Metrics (Pi 2)
+        widget:
+          type: glances
+          url: http://192.168.4.11:61208
+          version: 4
+          metric: cpu
+    - Frigate NVR:
+        icon: frigate.png
+        href: https://192.168.4.19:8971
+        description: Camera Object Detection (Fedora)
+        ping: 192.168.4.19
 ```
 
 ### `widgets.yaml`

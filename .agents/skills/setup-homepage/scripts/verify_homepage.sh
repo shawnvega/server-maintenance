@@ -43,7 +43,7 @@ else
 fi
 
 echo "=== 3. Checking Glances API Endpoints across Nodes ==="
-for IP in "192.168.4.5" "192.168.4.4" "192.168.4.19"; do
+for IP in "192.168.4.5" "192.168.4.4" "192.168.4.19" "192.168.4.18" "192.168.4.11"; do
   GLANCES_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 3 "http://${IP}:61208/api/4/quicklook" || echo "000")
   if [[ "${GLANCES_CODE}" == "200" ]]; then
     log_pass "Glances v4 API responsive on ${IP}:61208"
@@ -51,6 +51,21 @@ for IP in "192.168.4.5" "192.168.4.4" "192.168.4.19"; do
     log_fail "Glances API unreachable or non-200 on ${IP}:61208 (HTTP ${GLANCES_CODE})"
   fi
 done
+
+echo "=== 4. Checking Core Admin Endpoints (OMV & Cockpit) ==="
+OMV_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 3 "http://192.168.4.4/" || echo "000")
+if [[ "${OMV_CODE}" == "200" ]]; then
+  log_pass "OpenMediaVault web UI responsive on 192.168.4.4:80"
+else
+  log_fail "OpenMediaVault web UI unreachable on 192.168.4.4:80 (HTTP ${OMV_CODE})"
+fi
+
+COCKPIT_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" -m 3 "https://192.168.4.19:9090/" || echo "000")
+if [[ "${COCKPIT_CODE}" == "200" ]]; then
+  log_pass "Cockpit web console responsive on 192.168.4.19:9090"
+else
+  log_fail "Cockpit web console unreachable on 192.168.4.19:9090 (HTTP ${COCKPIT_CODE})"
+fi
 
 echo "=== 4. Checking Container Log for Permissions & Errors ==="
 RECENT_LOGS=$(ssh "shawn@${TARGET_HOST}" "docker logs homepage --tail 50 2>&1" || echo "LOG_FETCH_ERROR")

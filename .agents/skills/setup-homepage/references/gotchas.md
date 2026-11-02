@@ -168,3 +168,46 @@ Check API responsiveness manually:
 ```bash
 curl -s http://192.168.4.5:61208/api/4/quicklook
 ```
+
+---
+
+## 7. Frigate NVR Ingress & Port Mapping (`:8971` vs `:5000`)
+
+### Symptom
+Clicking the Frigate NVR tile from Homepage leads to `ERR_CONNECTION_REFUSED` or curl returns connection failure on port 5000:
+```text
+curl: (7) Failed to connect to 192.168.4.19 port 5000: Connection refused
+```
+
+### Root Cause
+Frigate 0.14+ deprecates unauthenticated port 5000 web UI exposure. The container compose configuration only maps host port `8971` with HTTPS TLS (`0.0.0.0:8971->8971/tcp`), leaving internal container port `5000` unexposed to the host network interface.
+
+### Fix
+Point Homepage to the HTTPS port `8971` with host ping check:
+```yaml
+- Frigate NVR:
+    icon: frigate.png
+    href: https://192.168.4.19:8971
+    description: Camera Object Detection (Fedora)
+    ping: 192.168.4.19
+```
+
+---
+
+## 8. Docker Container `RWLayer of container ... is unexpectedly nil`
+
+### Symptom
+Starting an existing or stopped Docker container stack (e.g. `glances` on Chromebook `192.168.4.18`) fails with:
+```text
+Error response from daemon: RWLayer of container <id> is unexpectedly nil
+failed to start containers: <name>
+```
+
+### Root Cause
+Occurs when the Docker daemon restarts or when underlying storage graph drivers (e.g. Btrfs RAID 1 on `/var`) desynchronize container read-write layer state from container runtime metadata.
+
+### Fix
+Force recreate the container using Docker Compose:
+```bash
+docker compose -f /home/shawn/docker/<stack>/compose.yml up -d --force-recreate
+```
