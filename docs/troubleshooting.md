@@ -243,6 +243,13 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
      ```
      See [docs/workflows.md](workflows.md#8-executing-commands-inside-docker-containers) for details.
 
+7. **Voice Dictation / Microphone Blocked in Web Dashboard**:
+   * **Root Cause**: Browsers block `getUserMedia` on plain HTTP origins (`http://192.168.4.19:9119`). Also, Hermes requires `stt` provider configuration in `config.yaml` to route speech-to-text to LiteLLM / MLX Whisper.
+   * **Fix**:
+     1. On the host Mac, run `./run.sh setup-whisper` to provision local MLX Whisper and LiteLLM audio routes.
+     2. In Chrome/Edge, navigate to `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, enable the flag, add `http://192.168.4.19:9119`, and restart the browser.
+     3. Verify end-to-end connectivity with `./run.sh test-hermes`.
+
 ### Recovery
 Fix host directory permissions to `0755` (`chmod go-w`):
 ```bash

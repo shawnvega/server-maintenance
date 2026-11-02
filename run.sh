@@ -28,6 +28,7 @@ usage() {
   echo "  check-host5          Inspect Host 5 (192.168.4.5) standalone upgrade & health status"
   echo "  deploy-host5         Deploy standalone upgrade script to Host 5 (192.168.4.5)"
   echo "  upgrade-host5        Trigger detached standalone maintenance on Host 5 (192.168.4.5)"
+  echo "  setup-whisper        Install & configure local Apple Silicon MLX Whisper & LiteLLM"
   echo "  test-hermes          Verify Hermes Gateway, Desktop, TUI grant & LiteLLM connectivity"
   echo "  change-password      Change login password on all servers and PiKVM admin"
   echo "  playbook <file.yml>  Run a custom playbook"
@@ -177,6 +178,9 @@ case "${CMD}" in
     ;;
   upgrade-host5)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/trigger_host5_upgrade.yml" "$@"
+    ;;
+  setup-whisper|install-whisper)
+    exec "${SCRIPT_DIR}/scripts/setup_mlx_whisper.sh" "$@"
     ;;
   change-password|passwd)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/change_password.yml" "$@"

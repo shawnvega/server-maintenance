@@ -271,6 +271,37 @@ else
   info "10. Skipping End-to-End Inference Completion (--quick flag specified)"
 fi
 
+# 11. Speech-to-Text (STT) / MLX Whisper Integration
+info "11. Checking Speech-to-Text (STT) & MLX Whisper Pipeline..."
+if curl -s -m 2 "http://127.0.0.1:8080/health" 2>/dev/null | grep -q "ok"; then
+  pass "MLX Whisper service is running locally on 127.0.0.1:8080"
+elif curl -s -m 2 "http://${MAC_IP}:8080/health" 2>/dev/null | grep -q "ok"; then
+  pass "MLX Whisper service is reachable on ${MAC_IP}:8080"
+else
+  warn "MLX Whisper service not responding on port 8080" \
+       "Start or setup MLX Whisper on Mac: ./run.sh setup-whisper"
+fi
+
+CONTAINER_WHISPER_CHECK=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
+  docker exec hermes-gateway curl -s -m 5 -H 'Authorization: Bearer ${LITELLM_KEY}' 'http://${MAC_IP}:${LITELLM_PORT}/v1/models' 2>/dev/null | grep -o '\"id\":\"whisper\"' || true
+" 2>/dev/null)
+if [[ -n "${CONTAINER_WHISPER_CHECK}" ]]; then
+  pass "LiteLLM exposes 'whisper' audio_transcription model to hermes-gateway"
+else
+  warn "LiteLLM reachable but 'whisper' model missing from catalog" \
+       "Ensure files/litellm_mac_config.yaml has whisper declared and reload LiteLLM"
+fi
+
+HERMES_STT_PROVIDER=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
+  docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config get stt.provider 2>/dev/null || echo "UNSET"
+' 2>/dev/null)
+if echo "${HERMES_STT_PROVIDER}" | grep -q "openai"; then
+  pass "Hermes STT provider configured: openai (routed to LiteLLM)"
+else
+  warn "Hermes STT provider is '${HERMES_STT_PROVIDER}'" \
+       "Expected 'openai'. Set with: docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.provider openai"
+fi
+
 echo ""
 echo "========================================================"
 echo -e " Verification Summary: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}, ${YELLOW}${WARNINGS} warnings${NC}"

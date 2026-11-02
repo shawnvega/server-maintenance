@@ -265,3 +265,22 @@ The cluster runs a centralized **Homepage** dashboard container on `192.168.4.5`
   * Execute `./run.sh homepage` to sync static compose and config files to `~/docker/homepage` and recreate the container.
   * Playbook: `deploy_homepage.yml` (included in `docker_stacks` on `192.168.4.5`).
 
+---
+
+## 10. MLX Whisper Voice Dictation & STT Setup
+
+The cluster utilizes local Apple Silicon Metal acceleration on the host Mac (`192.168.4.8`) to power low-latency speech-to-text dictation for client agents (such as Hermes on `192.168.4.19`).
+
+* **One-Click Provisioning**:
+  ```bash
+  ./run.sh setup-whisper
+  ```
+  Runs `scripts/setup_mlx_whisper.sh` to configure the `com.mlx.whisper` LaunchAgent on port 8080, route transcription requests through LiteLLM on port 4000, and execute a local self-test.
+* **Hermes Integration**:
+  Hermes Gateway delegates STT requests to `http://192.168.4.8:4000/v1` using bearer authentication, keeping CPU load off the dual-core Fedora node.
+* **Verification**:
+  Execute `./run.sh test-hermes` to verify the complete LLM and STT pipeline.
+* **Documentation**:
+  Refer to [.agents/skills/mlx-whisper/SKILL.md](../.agents/skills/mlx-whisper/SKILL.md) for architecture, configuration schemas, and troubleshooting.
+
+

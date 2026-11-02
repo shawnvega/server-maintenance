@@ -20,6 +20,20 @@ model_list:
     model_info:
       max_input_tokens: 131072
       max_output_tokens: 8192
+  - model_name: whisper
+    litellm_params:
+      model: openai/whisper
+      api_base: http://127.0.0.1:8080/v1
+      api_key: "none"
+    model_info:
+      mode: audio_transcription
+  - model_name: whisper-1
+    litellm_params:
+      model: openai/whisper
+      api_base: http://127.0.0.1:8080/v1
+      api_key: "none"
+    model_info:
+      mode: audio_transcription
 
 general_settings:
   master_key: "sk-hermes-mac-secret"

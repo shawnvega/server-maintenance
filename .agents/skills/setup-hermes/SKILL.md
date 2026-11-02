@@ -30,6 +30,7 @@ When encountering issues, locate your symptom below for the instant verified fix
 | Build hangs on `/usr/libexec/docker/cli-plugins/docker-buildx bake` | Deadlocked BuildKit session from abnormal termination | `ssh shawn@192.168.4.19 'pkill -f docker-buildx'` then re-run `./run.sh upgrade --tags docker --limit 192.168.4.19` |
 | LiteLLM access logs show 404 for `GET /api/tags` and `POST /api/show` | Hermes model name starts with `ollama/`, triggering native route probes | Model aliasing: Use alias `coding-26b` and `provider: custom` to force OpenAI wire routes (`/v1/*`) |
 | `curl: (56) Recv failure` immediately after starting container | s6-overlay init stages require 10–15s for migrations and uvicorn | Allow cold-boot grace period (~15s) until `HERMES_DASHBOARD_READY` appears in logs |
+| Voice dictation / mic fails or disabled in dashboard | Insecure HTTP origin (`getUserMedia`) or missing STT backend | Run `./run.sh setup-whisper` and enable `chrome://flags/#unsafely-treat-insecure-origin-as-secure` |
 
 ---
 
@@ -47,10 +48,10 @@ When encountering issues, locate your symptom below for the instant verified fix
   * **`hermes-gateway`** (Port **`9119`**): Core agent runtime, tool execution engine, session store, authenticated REST/WebSocket dashboard (`nousresearch/hermes-agent:latest`).
   * **`hermes-desktop`** (Port **`6080`**): Sandboxed virtual desktop (`hermes-desktop:minimal`) running `Xvfb` (display `:1`, 1280x800 24-bit TrueColor), `openbox`, `lxterminal`, `chromium` (`--no-sandbox`), and `noVNC` via `websockify`.
   * **Shared Workspace**: `/home/shawn/docker/hermes/data` mounted to `/opt/data` (gateway) and `/home/hermes/workspace` (desktop).
-* **LLM Provider (Host Mac at `192.168.4.8`)**:
-  * Engine: Local Ollama serving `gemma4:26b-mlx-code`.
+* **LLM & Audio STT Provider (Host Mac at `192.168.4.8`)**:
+  * Engine: Local Ollama serving `gemma4:26b-mlx-code` + local MLX Whisper serving `whisper-large-v3-turbo` (`http://127.0.0.1:8080`).
   * Proxy: LiteLLM proxy on `0.0.0.0:4000` with Bearer token authentication (`sk-hermes-mac-secret`), managed via macOS LaunchAgent (`~/Library/LaunchAgents/com.litellm.proxy.plist`).
-  * Configuration: `files/litellm_mac_config.yaml` declaring alias `coding-26b` with `max_input_tokens: 131072` (128k context) and `max_output_tokens: 8192`.
+  * Configuration: `files/litellm_mac_config.yaml` declaring alias `coding-26b` for LLM and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
 
 ### Core Invariants
 

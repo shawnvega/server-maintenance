@@ -3,3 +3,11 @@ model:
   provider: custom
   base_url: http://192.168.4.8:4000/v1
   api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
+
+stt:
+  enabled: true
+  provider: openai
+  openai:
+    base_url: http://192.168.4.8:4000/v1
+    api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
+    model: whisper

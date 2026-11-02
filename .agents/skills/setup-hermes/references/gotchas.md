@@ -25,6 +25,7 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | LiteLLM port 4000 exposed to entire LAN on Mac | Default binding to 0.0.0.0 is open without firewall rules | [15. Mac Host Port 4000 Firewall Exposure](#15-mac-host-port-4000-firewall-exposure-macos-pf) |
 | Fresh deploy resets model to `opus 4.6` unless manually configured | Profile `config.yaml` is missing on fresh deployments | [16. Profile Pre-Seeding via `config.yaml.j2`](#16-automatic-profile-pre-seeding-via-configyaml) |
 | Hermes shows 256k context window (`.../256k`) instead of 128k | Base architecture metadata reports 256k; LiteLLM lacks `model_info` | [17. Context Window Mismatch (128k vs 256k)](#17-context-window-mismatch-128k-vs-256k-between-ollama-litellm-and-hermes) |
+| Voice dictation / mic fails or is disabled in dashboard | Insecure HTTP origin (`getUserMedia`) or missing STT backend | [18. Voice Dictation & MLX Whisper Setup](#18-voice-dictation-speech-to-text-and-mlx-whisper-integration) |
 
 ---
 
@@ -404,3 +405,31 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.litellm.proxy.plist
   ssh shawn@192.168.4.19 "docker restart hermes-gateway"
   ```
+
+---
+
+### 18. Voice Dictation, Speech-to-Text, and MLX Whisper Integration
+* **The Symptom**:
+  Clicking the microphone icon in the Hermes web dashboard fails silently, is greyed out, or raises a permission error (`navigator.mediaDevices.getUserMedia` error). Alternatively, voice transcription returns an internal server error or 500 when processing recorded audio.
+* **Root Causes**:
+  1. **Browser Security Model (Insecure Origin)**: Modern web browsers strictly forbid microphone capture (`getUserMedia`) on plain HTTP origins that are not `localhost`. Accessing the dashboard directly at `http://192.168.4.19:9119` triggers this block.
+  2. **Missing STT Configuration in Hermes**: Hermes has no speech-to-text backend declared by default. Without an `stt:` block in `config.yaml`, the gateway cannot handle transcription uploads.
+  3. **Launchd Environment Lacking `ffmpeg` in PATH**: When running an Apple Silicon Whisper server under macOS `launchd`, the default launchd daemon `PATH` does not include `/opt/homebrew/bin`. When `mlx_whisper` invokes `ffmpeg` to transcode browser WebM/Opus audio, it crashes with `[Errno 2] No such file or directory: 'ffmpeg'`.
+* **The Fix**:
+  1. **Provision MLX Whisper on Host Mac**:
+     Run `./run.sh setup-whisper` to provision `com.mlx.whisper` on port 8080 and wire `whisper` into LiteLLM on port 4000.
+  2. **Unblock Browser Microphone**:
+     In Chrome, Edge, or Brave, open `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, enable the flag, add `http://192.168.4.19:9119`, and relaunch the browser.
+  3. **Configure Hermes STT**:
+     Ensure `stt` is routed to LiteLLM in `/opt/data/config.yaml`:
+     ```yaml
+     stt:
+       enabled: true
+       provider: openai
+       openai:
+         base_url: http://192.168.4.8:4000/v1
+         api_key: sk-hermes-mac-secret
+         model: whisper
+     ```
+  4. **Verify**:
+     Run `./run.sh test-hermes` to validate check #11 (MLX Whisper daemon, LiteLLM catalog, and Hermes STT configuration).

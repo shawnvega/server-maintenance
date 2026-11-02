@@ -92,6 +92,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 ./run.sh cleanup -K                      # Vacuum journals, clean package caches, prune docker
 ./run.sh restart-vlc                     # Restart persistent VLC RTSP stream (.18)
 ./run.sh test-hermes                     # Verify Hermes Gateway, Desktop, TUI grant & LiteLLM
+./run.sh setup-whisper                   # Install & verify local Apple Silicon MLX Whisper daemon (.8)
 ./run.sh check-host5                     # Inspect Host 5 status log
 ./run.sh upgrade-host5 -K                # Trigger detached standalone upgrade for Host 5
 ./run.sh backup-data -K                  # Sync Immich DB & data shares to Pi 5
