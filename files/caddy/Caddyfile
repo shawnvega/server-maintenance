@@ -5,6 +5,11 @@ http://192.168.4.5 {
 	reverse_proxy 127.0.0.1:3001
 }
 
+https://192.168.4.5 {
+	tls internal
+	reverse_proxy 127.0.0.1:3001
+}
+
 immich.vvvega.com {
 	reverse_proxy 192.168.4.4:2283 {
 		header_up Host {host}
