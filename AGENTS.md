@@ -3,365 +3,96 @@
 ## Project Overview
 This repository manages automation and configuration for self-hosted home servers natively using Ansible in a project-local Python virtual environment (`.venv`).
 
-### Managed Hosts
+### Managed Hosts Quick Reference
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml`, `semaphore`, native Caddy reverse proxy |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0` |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0`, `hermes` (gateway `:9119` + desktop `:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
-
-#### Appliance & Storage Architectural Differences
-* **Split-Storage Btrfs RAID 1 Chromebook (`192.168.4.18`)**: Keeps `/boot/efi`, `/` (`/usr`, `/etc`, `/home`), and `/swapfile` on fast internal eMMC (`/dev/mmcblk1`), `/tmp` on `tmpfs` (RAM), and mounts `/var` (`compress=zstd:3,noatime,nofail`) on a 3-device Btrfs RAID 1 (`-d raid1 -m raid1`) pool across `/dev/sda` (7.6 GB USB microSD reader), `/dev/sdb` (7.5 GB USB thumb drive), and `/dev/sdc` (59.5 GB SD card). Automated via `migrate_var_btrfs.yml` (`./run.sh migrate-var -K`).
-* **OverlayFS Pi (`192.168.4.11`)**: Uses kernel OverlayFS (writes redirected to RAM tmpfs) + `/etc/fstab` boot write protection. Controlled via `raspi-config nonint do_overlayfs 0|1`. Requires disabling overlay and rebooting into RW mode to apply `apt` updates, followed by re-enabling overlay and rebooting back into RO mode.
-* **Native PiKVM (`192.168.4.66`)**: Uses direct native read-only filesystem mounts (`/` ext4 and `/boot` vfat mounted `ro` via kernel cmdline and `/etc/fstab`). Uses `/usr/bin/rw` and `/usr/bin/ro` remount scripts. Upgraded via official `/usr/bin/pikvm-update --no-reboot` which tests `kvmd -m` integrity. A reboot safely returns `/` and `/boot` to read-only mode if updates were applied.
+| `192.168.64.6` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Gateway backed by Mac host Ollama) |
+| `192.168.64.9` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Experimental Gateway backed by Mac host Ollama) |
 
 ---
 
-## Environment & Tooling
+## Core Tooling & Virtual Environment (`.venv`)
 
-### Virtual Environment (`.venv`) Usage
-This repository relies strictly on a local Python virtual environment located at `.venv/` to isolate Ansible and its dependencies from the host system (avoiding Homebrew/system Python conflicts and PEP 668 restrictions).
+This repository isolates Ansible and its dependencies in a project-local virtual environment at `.venv/`.
+* **Execution Wrapper**: Always invoke `./run.sh <command>` or `.venv/bin/ansible-playbook`. Never invoke global `ansible` directly.
+* **Auto-Provisioning**: `./run.sh` automatically creates `.venv` and installs `requirements.txt` if missing.
+* **Manual Activation**: `source .venv/bin/activate` or execute binaries directly (`.venv/bin/ansible-playbook`).
+* **Reset Virtual Environment**: `rm -rf .venv && ./run.sh ping`.
 
-#### 1. Automatic Provisioning
-The primary CLI wrapper `./run.sh` automatically detects if `.venv` is missing or invalid. If missing, it creates `.venv` via `python3 -m venv .venv` and installs all dependencies from `requirements.txt`:
+---
+
+## Core Guardrails & Invariants for AI Agents
+
+1. **Always use `.venv` or `./run.sh`**: Never execute global system `ansible` or `pip`.
+2. **Validate Syntax Before Commits**: Run `.venv/bin/ansible-playbook <playbook.yml> --syntax-check` whenever creating or modifying playbooks.
+3. **Respect Safety Checks**: Verify target devices in `inventory.ini` before running destructive or block storage commands (`rpi-clone`).
+4. **Preserve `local_tmp` in `ansible.cfg`**: Keep `local_tmp = ./.ansible/tmp` to avoid permission errors with user home directories.
+5. **PiKVM Invariants (`192.168.4.66`)**:
+   * Runs Arch Linux ARM as `root` (no `sudo` required).
+   * Uses `ansible_remote_tmp=/tmp/.ansible` (writes to `tmpfs` because `/root` is read-only).
+   * Never run `apt`, `dpkg`, or `raspi-config` on PiKVM. Updates run strictly via `/usr/bin/pikvm-update --no-reboot`.
+6. **Semaphore Runner Safety (`192.168.4.5`)**:
+   * When running from Semaphore UI, Host 5 is safely skipped in master playbooks. Use `check-host5`, `deploy-host5`, or `upgrade-host5` for Host 5 maintenance.
+
+---
+
+## Documentation Router
+
+Deep architectural and operational documentation is organized in `docs/`. **Read the relevant document before modifying or troubleshooting that subsystem:**
+
+| Subsystem / Task | Document | Key Topics Covered |
+|---|---|---|
+| **Cluster Topology & Appliances** | [docs/architecture.md](docs/architecture.md) | Host specs, Hermes stack, OpenClaw UTM VMs, Split-Storage Chromebook, RO comparison |
+| **Upgrade Pipelines & Lifecycles** | [docs/pipelines.md](docs/pipelines.md) | `upgrade_all.yml`, `upgrade.yml`, stage gates (scrub, load, reboot), tag execution, Mac upgrades |
+| **Btrfs Storage & Scrubs** | [docs/storage-btrfs.md](docs/storage-btrfs.md) | Health checks (`check-btrfs`), scrubs (`scrub-btrfs`), RAID 1 `/var` migration & drive replacement |
+| **Read-Only Appliances** | [docs/appliances.md](docs/appliances.md) | OverlayFS Pi (`.11`) RW/RO lifecycle & recovery, Arch PiKVM (`.66`) mounts & `pikvm-update` |
+| **Workflows, Caddy & Vault** | [docs/workflows.md](docs/workflows.md) | Native Caddy reload, Host 5 Semaphore safety, Immich sync, password update, Vault rekey |
+| **Troubleshooting & Recovery** | [docs/troubleshooting.md](docs/troubleshooting.md) | High loadavg halts, backup failures, Btrfs error stats, RO rescue commands, VLC restart |
+
+---
+
+## Essential Command Cheatsheet
+
 ```bash
-./run.sh ping   # Auto-creates .venv and installs dependencies if missing
-```
-
-#### 2. Manual Setup & Activation
-To manually create and activate the virtual environment in your local shell:
-```bash
-# Create the virtual environment
-python3 -m venv .venv
-
-# Activate the virtual environment
-source .venv/bin/activate
-
-# Install or update dependencies
-pip install -r requirements.txt
-```
-To deactivate the virtual environment:
-```bash
-deactivate
-```
-
-#### 3. Direct Binary Execution (No Activation Needed)
-For scripts, subshells, automated jobs, or AI agent commands, invoking the binaries directly inside `.venv/bin/` is preferred over shell activation:
-```bash
-# Run playbooks directly
-.venv/bin/ansible-playbook ping.yml
-
-# Validate playbook syntax
-.venv/bin/ansible-playbook upgrade.yml --syntax-check
-
-# Run ad-hoc Ansible modules
-.venv/bin/ansible standard_servers -m ping
-
-# Inspect or install packages
-.venv/bin/pip list
-.venv/bin/pip install -r requirements.txt
-```
-
-#### 4. Rebuilding / Resetting the Virtual Environment
-If the host Python version changes (e.g. after a Homebrew `python3` upgrade) or if dependencies become corrupted:
-```bash
-rm -rf .venv
+# Connectivity
 ./run.sh ping
-```
-Or manually:
-```bash
-rm -rf .venv
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-```
 
-### Dependencies & Configuration
-* **Dependencies**: Defined in `requirements.txt` (contains `ansible>=9.0.0`).
-* **CLI Wrapper**: `./run.sh` wraps `.venv/bin/ansible-playbook` and `ansible`, managing vault passwords (`.vault_pass`) and arguments transparently.
-* **Local Temp Directory**: `ansible.cfg` configures `local_tmp = ./.ansible/tmp` to prevent sandbox permission errors in user directories.
-
----
-
-## Upgrade Pipeline Stages
-
-### Concurrent All-in-One (`upgrade_all.yml` targeting `servers`)
-Uses `strategy: free` and `forks: 10` so all 6 servers run simultaneously:
-1. `192.168.4.11` checks overlay and boot write protection, disables overlay, reboots into RW mode, and remounts `/boot/firmware` as RW.
-2. `192.168.4.66` runs `pikvm-update --no-reboot`, and if updates are applied, reboots cleanly into verified Read-Only mode.
-3. Standard servers immediately run pre-flight Btrfs scrub safety checks (`tags: [scrub_check]`). If an active scrub is detected on any node (such as `.4`, `.5`, `.18`, or `.19`), that node displays scrub progress/ETA and is cleanly skipped (`meta: end_host`) to prevent interrupting the scrub. Unaffected nodes run their load checks, `rpi-clone` backups, and container pulls.
-4. OS and package upgrades execute across standard nodes concurrently (APT/DNF and Snap packages like `vlc` on `.18`, with pre-upgrade dpkg healing on Debian).
-5. Standard nodes restart Docker stacks, then restart persistent VLC video streams (`192.168.4.18`).
-6. `192.168.4.11` restores boot write protection, re-enables overlay, and reboots back into verified Read-Only mode.
-
-### Standard Hosts Only (`upgrade.yml` targeting `standard_servers`)
-0. **Btrfs Scrub Safety Check (`tags: [scrub_check]`)**: Detects active Btrfs scrub operations across all mounted filesystems. If running, displays detailed progress/ETA and safely ends host execution (`meta: end_host`) to avoid heavy I/O contention or interrupting the scrub (can be overridden with `-e "ignore_btrfs_scrub=true"` or `--skip-tags scrub_check`).
-1. **Load Check (`tags: [load_check]`)**: Waits for loadavg to drop below `load_threshold`.
-2. **Backup (`tags: [backup]`)**: Runs `rpi-clone` on hosts with `backup_method == 'rpi-clone'`. Halts on error.
-3. **OS & Package Upgrades (`tags: [os, snap]`)**: Uses `apt` for Debian/Pi OS, `dnf` for Fedora, and `snap refresh` for configured snap packages (`vlc` on `.18`).
-4. **Docker Stacks (`tags: [docker]`)**: Minimal downtime update (`docker compose pull` then rolling `docker compose up -d` with system load checks between each stack restart).
-5. **VLC Video Stream (`tags: [vlc, snap, os]`)**: Checks if VLC is already running (`pgrep -x vlc`); if not running (or if `force_vlc_restart=true` via `./run.sh restart-vlc`), launches the fullscreen background RTSP stream on `DISPLAY=:0` and verifies process execution.
-6. **Safe Automated Reboot (`tags: [reboot]`)**: Checks if a reboot is required (`/var/run/reboot-required` on Debian or `needs-restarting -r` on Fedora). If required, evaluates 4 safety conditions: (1) no active Btrfs scrub, balance, or device replace, (2) no active backup jobs (`rpi-clone`, `rsync`, `restic`), (3) no interactive SSH user sessions (`who | grep pts/`), and (4) 1-min system load < 4.0. If all checks pass, reboots safely and verifies host returns online (restarting VLC stream if configured); if any check fails, logs a detailed blocker report and cleanly defers the reboot without interrupting the pipeline (can be skipped with `--skip-tags reboot` or `-e "auto_reboot=false"`).
-
-### Read-Only Pi Maintenance Only (`readonly_upgrade.yml` targeting `readonly_servers`)
-1. **Detect Protections**: Checks running and configured states of OverlayFS (`raspi-config nonint get_overlay_now`/`get_overlay_conf`) and Boot Write Protection (`get_bootro_now`/`get_bootro_conf`).
-2. **Switch to RW**: Disables overlay (`raspi-config nonint do_overlayfs 1`), reboots into RW mode, remounts `/boot/firmware` (or `/boot`) as read-write (`mount -o remount,rw ...`), and verifies both rootfs and boot partition are writable.
-3. **Upgrade**: Heals pending dpkg states (`dpkg --configure -a`) and runs `apt update && apt full-upgrade -y && apt autoremove`.
-4. **Restore Protections**: Ensures boot write protection in `/etc/fstab` (`raspi-config nonint enable_bootro`), remounts boot read-only, and re-enables overlay (`raspi-config nonint do_overlayfs 0`).
-5. **Reboot & Verify**: Reboots back into Read-Only mode and verifies both `get_overlay_now == 0` and `get_bootro_now == 0`.
-
-### PiKVM Server Maintenance Only (`pikvm_upgrade.yml` targeting `pikvm_servers`)
-1. **Detect Mount Status**: Checks initial mount status of `/` and `/boot` via `findmnt`.
-2. **Upgrade Software**: Runs `/usr/bin/pikvm-update --no-reboot` which handles repository sync, package cleanup, `kvmd -m` integrity verification, and package upgrades.
-3. **Restore Read-Only Mode**: If updates applied (exit code 100), reboots node to boot cleanly back into verified Read-Only mode. If already up-to-date (exit code 0), ensures read-only via `/usr/bin/ro`.
-4. **Verify**: Verifies both `/` and `/boot` are mounted read-only and `kvmd -m` integrity passes.
-
----
-
-## Common Commands
-
-### Connectivity Check
-```bash
-./run.sh ping
-```
-
-### Full Upgrade Pipelines
-```bash
-# All servers simultaneously (strategy: free)
+# Master Concurrent Upgrade (all 6 nodes simultaneously)
 ./run.sh upgrade-all -K
 
-# Standard servers only (192.168.4.4, 4.5, 4.18, 4.19)
+# Standard Nodes Upgrade (.4, .5, .18, .19)
 ./run.sh upgrade -K
 
-# Read-only server maintenance cycle only (192.168.4.11)
+# Read-Only Pi Maintenance Cycle (.11)
 ./run.sh upgrade-ro -K
 
-# PiKVM server maintenance cycle only (192.168.4.66)
-./run.sh upgrade-pikvm                    # No -K needed (authenticates as root)
+# PiKVM Maintenance (.66, connects as root, no -K needed)
+./run.sh upgrade-pikvm
 
-# Local Mac workstation upgrade cycle (Homebrew, casks, npm, gh, apps, check macOS)
-./run.sh upgrade-mac                     # Local Mac upgrade (no -K needed; uses local sudo/Touch ID if needed)
-./run.sh upgrade-mac -n                  # Dry run preview of pending updates
-./run.sh upgrade-mac --all               # Full upgrade including macOS system updates
-```
+# Local Mac Workstation Maintenance
+./run.sh upgrade-mac                     # Standard update
+./run.sh upgrade-mac -n                  # Dry run preview
 
-> **Note on sudo & passwords**: The local Mac workstation has its own administrator password (or Touch ID), completely separate from the remote servers' shared sudo password (`-K`). Homebrew operations run strictly as the local user without `sudo`. Sudo is only requested directly in the local terminal if installing Apple system software updates or privileged cask packages.
+# Btrfs Storage Health & Scrubs
+./run.sh check-btrfs                     # Health check across all Btrfs hosts
+./run.sh scrub-btrfs                     # Start Btrfs scrub on Pi 5
+./run.sh scrub-btrfs --all               # Start Btrfs scrub across all hosts
 
+# Service Maintenance
+./run.sh caddy                           # Validate & reload native Caddy reverse proxy
+./run.sh cleanup -K                      # Vacuum journals, clean package caches, prune docker
+./run.sh restart-vlc                     # Restart persistent VLC RTSP stream (.18)
+./run.sh check-host5                     # Inspect Host 5 status log
+./run.sh upgrade-host5 -K                # Trigger detached standalone upgrade for Host 5
+./run.sh backup-data -K                  # Sync Immich DB & data shares to Pi 5
 
-### Selective Execution via Tags
-```bash
-./run.sh upgrade --tags docker            # Only update containers
-./run.sh upgrade --tags os -K             # Only OS package upgrades
-./run.sh upgrade --tags snap -K           # Only Snap package upgrades (192.168.4.18)
-./run.sh upgrade --tags vlc               # Only restart VLC video stream (192.168.4.18)
-./run.sh restart-vlc                      # Dedicated shortcut to restart VLC stream
-./run.sh upgrade --tags backup -K         # Only backups
-./run.sh upgrade --skip-tags backup -K    # Upgrade without backup
-./run.sh upgrade --limit 192.168.4.4 -K   # Single host
-```
-
-### Dedicated Backups
-```bash
-# Block storage backup (rpi-clone to SD/storage on 192.168.4.4, 192.168.4.5)
-./run.sh backup -K
-
-# Data share & Immich synchronization (192.168.4.4 -> Pi 5 storage; can be scheduled in Semaphore)
-./run.sh backup-data -K
-```
-
-### Native Caddy Reverse Proxy (192.168.4.5)
-```bash
-# Validate and deploy Caddy reverse proxy configuration with zero-downtime reload
-./run.sh caddy
-```
-
-### Disk Space Maintenance, Cleanup & Storage Migration
-```bash
-# Reclaim disk space across all standard servers (journal vacuum, apt clean, docker prune)
-./run.sh cleanup -K
-
-# Clean disk space on a single host
-./run.sh cleanup --limit 192.168.4.18 -K
-
-# Format 3-device Btrfs RAID 1 (/dev/sda, /dev/sdb, /dev/sdc), migrate /var, & reclaim eMMC on 192.168.4.18
-./run.sh migrate-var -K
-```
-
-### Btrfs Filesystem & Device Health Checks
-```bash
-# Check Btrfs health across all Btrfs servers (192.168.4.4, .5, .18, .19)
-./run.sh check-btrfs
-
-# Check Btrfs health on a specific server (e.g. 192.168.4.18 Btrfs RAID 1 /var)
-./run.sh check-btrfs --limit 192.168.4.18
-
-# Check Btrfs health on storage servers only (192.168.4.4 & 192.168.4.5)
-./run.sh check-btrfs -e target_hosts=btrfs_storage_servers
-```
-
-### Btrfs Scrub Operations
-```bash
-# Start Btrfs background scrub on Pi 5 (192.168.4.5) storage pools
-./run.sh scrub-btrfs
-
-# Start Btrfs scrub on a specific pool (hdds or ssds)
-./run.sh scrub-btrfs -e scrub_target=hdds
-
-# Start Btrfs scrub on 192.168.4.4
-./run.sh scrub-btrfs --limit 192.168.4.4
-
-# Start Btrfs scrub on 192.168.4.18 (/var Btrfs RAID 1)
-./run.sh scrub-btrfs --limit 192.168.4.18
-
-# Start Btrfs scrub on 192.168.4.19 (Fedora root)
-./run.sh scrub-btrfs --limit 192.168.4.19
-
-# Start Btrfs scrub across all Btrfs servers concurrently
-./run.sh scrub-btrfs --all
-```
-
-### Host 5 (192.168.4.5) Standalone Maintenance & Semaphore Safety
-```bash
-# Check Host 5 upgrade & health status (reads /home/shawn/logs/upgrade_host5.status)
-./run.sh check-host5
-
-# Deploy standalone upgrade_host5.sh script and enable Docker live-restore on 192.168.4.5
-./run.sh deploy-host5 -K
-
-# Trigger detached standalone maintenance on 192.168.4.5 via systemd (safe for Semaphore)
-./run.sh upgrade-host5 -K
-```
-
-### Universal Password Management
-```bash
-# Update user password across all servers (shawn), PiKVM root, and PiKVM Web UI admin
-./run.sh change-password -K
-```
-
-### Decommission PHP / WordPress Workloads
-```bash
-# Decommission and shut down WordPress workloads, close ports, and harden Caddy ingress
-./run.sh shutdown-php
-```
-
-### Ad-hoc Shell Execution
-```bash
+# Ad-hoc Shell Commands
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
 ```
-
-### Syntax Validation
-```bash
-.venv/bin/ansible-playbook <playbook.yml> --syntax-check
-```
-
----
-
-## Failure Mitigation & Troubleshooting
-
-### High Loadavg Halting Pipeline
-* If Stage 1 fails with a load threshold timeout, inspect running processes:
-  ```bash
-  ./run.sh raw 'ps aux --sort=-%cpu | head -n 10'
-  ```
-* If load is temporarily high due to indexing or background tasks, rerun with an override variable:
-  ```bash
-  ./run.sh upgrade -K -e "load_threshold=8.0"
-  ```
-
-### `rpi-clone` Failure
-* If `rpi-clone` fails, check if the backup device was dismounted or changed device name:
-  ```bash
-  ./run.sh raw 'lsblk'
-  ```
-* Verify the target device specified in `inventory.ini` matches the current block device.
-
-### Btrfs RAID 1 `/var` Health or Device Replacement (`192.168.4.18`)
-* To inspect `/var` Btrfs RAID 1 mirror allocation and error counters:
-  ```bash
-  ssh shawn@192.168.4.18 'sudo btrfs filesystem usage -T /var && sudo btrfs device stats /var'
-  ```
-* If one of the 3 external drives (`/dev/sda`, `/dev/sdb`, or `/dev/sdc`) is replaced with a new or larger drive:
-  ```bash
-  ssh shawn@192.168.4.18 'sudo btrfs replace start <old_dev_or_id> <new_dev> /var'
-  ```
-
-### Read-Only Overlay Pi Fails to Return to Read-Only (`192.168.4.11`)
-* If `readonly_upgrade.yml` fails, check current status manually:
-  ```bash
-  ssh shawn@192.168.4.11 'sudo raspi-config nonint get_overlay_now'
-  ```
-  - Output `0` = Overlay active (Read-Only).
-  - Output `1` = Overlay disabled (Read/Write).
-* To manually force back into Read-Only mode:
-  ```bash
-  ssh shawn@192.168.4.11 'sudo raspi-config nonint do_overlayfs 0 && sudo reboot'
-  ```
-
-### PiKVM Fails to Return to Read-Only or Configuration Error (`192.168.4.66`)
-* Check mount status:
-  ```bash
-  ssh root@192.168.4.66 'findmnt -n -o OPTIONS /; findmnt -n -o OPTIONS /boot'
-  ```
-* If filesystems are left in Read-Write mode:
-  ```bash
-  ssh root@192.168.4.66 '/usr/bin/ro'
-  # Or perform a reboot (PiKVM kernel cmdline boots back into RO automatically)
-  ssh root@192.168.4.66 'reboot'
-  ```
-* If `kvmd -m` integrity check fails:
-  - Do NOT reboot until `kvmd -m` succeeds. Inspect output:
-    ```bash
-    ssh root@192.168.4.66 'kvmd -m'
-    ```
-
----
-
-## File Structure & Conventions
-* `inventory.ini`: Server definitions, host variables (`backup_method`, `backup_device`, `load_threshold`, `docker_stacks`), and groups (`standard_servers`, `readonly_servers`, `pikvm_servers`, `btrfs_storage_servers`, `btrfs_servers`).
-* `ansible.cfg`: Core Ansible configuration (forks=10, inventory path, local tmp dir, YAML stdout callback, SSH pipelining).
-* `upgrade_all.yml`: Master concurrent upgrade playbook for all 6 servers (safely skips `192.168.4.5` when run inside Semaphore).
-* `upgrade.yml`: Native multi-stage upgrade playbook for standard servers (safely skips `192.168.4.5` when run inside Semaphore).
-* `check_host5.yml`: Lightweight status inspection playbook for Host 5 (`192.168.4.5`) in Semaphore or CLI.
-* `trigger_host5_upgrade.yml`: Detached fire-and-forget playbook to run `upgrade_host5.sh` via systemd from Semaphore.
-* `deploy_host5_maintenance.yml`: Playbook to deploy `files/upgrade_host5.sh` and enable Docker `live-restore` on `192.168.4.5`.
-* `files/upgrade_host5.sh`: Standalone native host maintenance bash script for `192.168.4.5`.
-* `cleanup.yml`: Automated disk space cleanup playbook (journal capping/vacuum, package cache clean, docker prune).
-* `change_password.yml`: Automated password update playbook across all standard servers, PiKVM root/admin, and OverlayFS Pi.
-* `shutdown_php.yml`: Playbook to decommission WordPress/PHP workloads, close ports, disable auto-restart, and harden Caddy ingress.
-* `btrfs_check.yml`: Automated health inspection playbook for Btrfs filesystems, device error stats, scrub & balance status, and disk allocation.
-* `btrfs_scrub.yml`: Automated playbook to start and manage background Btrfs scrubs on storage pools with idempotent state checks and error summaries (default: `192.168.4.5`).
-* `btrfs_scrub_4.yml`, `btrfs_scrub_5.yml`, `btrfs_scrub_18.yml`, `btrfs_scrub_19.yml`: Dedicated host playbooks for starting Btrfs scrub on specific nodes (ideal for Semaphore UI task templates).
-* `btrfs_scrub_all.yml`: Playbook to start background Btrfs scrubs concurrently across all cluster Btrfs servers (`btrfs_servers`).
-* `migrate_var_btrfs.yml`: Automated playbook to format a 3-device Btrfs RAID 1 pool (`/dev/sda`, `/dev/sdb`, `/dev/sdc`), migrate `/var`, and reclaim internal eMMC space on `192.168.4.18`.
-* `readonly_upgrade.yml`: Automated maintenance playbook for overlayfs read-only Raspberry Pi.
-* `pikvm_upgrade.yml`: Automated maintenance playbook for Arch Linux ARM read-only PiKVM server.
-* `caddy.yml`: Dedicated playbook to deploy, validate, and reload native Caddy reverse proxy on `192.168.4.5`.
-* `files/caddy/Caddyfile`: Source of truth for Caddy reverse proxy routing rules and certificates.
-* `backup.yml`: Dedicated playbook for `rpi-clone` block backups.
-* `backup_data.yml`: Automated playbook for user data shares, external drive sync, and Immich DB/photo backup to Pi 5 storage (compatible with Semaphore scheduling).
-* `setup_remote_backup.yml`: Playbook for configuring remote script backups and managing crontab states on `192.168.4.4`.
-* `ping.yml`: Quick connectivity verification playbook.
-* `tasks/check_btrfs_scrub.yml`: Modular task for pre-flight active Btrfs scrub detection during upgrade pipelines.
-* `tasks/check_semaphore_safety.yml`: Modular task for detecting Semaphore runner execution, displaying Host 5 status, and safely ending host execution on `192.168.4.5`.
-* `tasks/run_btrfs_scrub.yml`: Modular task for dynamic Btrfs filesystem discovery, idempotency checks, scrub lifecycle, and status reporting.
-* `tasks/deploy_caddy.yml`: Modular task for validating and deploying `/etc/caddy/Caddyfile` with zero-downtime reload.
-* `tasks/restart_docker_stack.yml`: Modular task for restarting a docker stack with pre-restart system load verification.
-* `tasks/restart_vlc_stream.yml`: Modular task to cleanly stop, launch, and verify persistent fullscreen VLC video stream.
-* `tasks/safe_reboot.yml`: Modular task for evaluating reboot requirement, checking Btrfs operations, backup processes, interactive SSH sessions, system load, and safely executing or deferring reboot.
-* `run.sh`: Main entrypoint for humans and automation.
-* `requirements.txt`: Python package requirements.
-* `AGENTS.md` / `CLAUDE.md`: Repository instructions and conventions for AI assistants.
-* `.gitignore`: Excludes `.venv/`, `.ansible/`, retry files, and system logs.
-
-### Guidelines for AI Agents
-1. **Always use `.venv` or `./run.sh`**: Never invoke global `ansible` directly.
-2. **Validate Syntax Before Commits**: Run `.venv/bin/ansible-playbook <playbook> --syntax-check` when creating or modifying playbooks.
-3. **Respect Safety Checks**: Verify host variables before running hardware/backup operations like `rpi-clone`.
-4. **Preserve `local_tmp` in `ansible.cfg`**: Keep temporary directory pointing to `./.ansible/tmp` to avoid sandbox and permission issues with `/Users/shawn/.ansible`.
-5. **PiKVM Environment Specifics (`192.168.4.66`)**:
-   - Runs Arch Linux ARM as `root` (no `sudo` required).
-   - Because `/root` is read-only when mounted `ro`, `ansible_remote_tmp=/tmp/.ansible` is configured in `inventory.ini` to write to the `tmpfs` at `/tmp`.
-   - Never run `raspi-config` or `apt` commands on `192.168.4.66`. Always use `/usr/bin/pikvm-update` for system updates to ensure KVMD service integrity checks and hooks run properly.
