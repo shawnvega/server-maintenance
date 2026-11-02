@@ -96,6 +96,22 @@ Send a test inference completion from inside the container through LiteLLM to Ol
 .venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -X POST http://192.168.4.8:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
 ```
 
+#### D. Inspect & Configure Active Model in Hermes Profile
+Hermes reads its default model from persistent `/opt/data/config.yaml`. Verify or update the active model via CLI:
+```bash
+# Check resolved model configuration
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config get model"
+
+# Set default model to local coding-26b
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.default coding-26b"
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.provider custom"
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.8:4000/v1"
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.api_key sk-hermes-mac-secret"
+
+# Check status
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes status"
+```
+
 ---
 
 ## 3. Client Access Endpoints
@@ -114,5 +130,5 @@ Refer to the specialized reference documents for detailed troubleshooting and de
 
 | Reference Document | Key Topics Covered |
 |---|---|
-| **[references/gotchas.md](references/gotchas.md)** | • Fedora `/etc/timezone` vs `/etc/localtime` fix<br>• Pre-pulling new / custom build-from-source stacks<br>• Custom Docker context and permissions sync in Ansible<br>• Mac Python 3.15 wheel build failures with LiteLLM<br>• Jinja ad-hoc templating conflicts (`{{.Name}}`)<br>• Headless container exit on non-TTY stdin (`fd=0`)<br>• June 2026 Dashboard auth requirements<br>• Container naming conflict during compose rename<br>• Cold-boot readiness timing (10–15s)<br>• Openbox menu alternatives & Chromium container flags<br>• Docker BuildKit session deadlock & recovery<br>• TUI reconnect loop (`unsafe_control_permissions`) |
+| **[references/gotchas.md](references/gotchas.md)** | • Fedora `/etc/timezone` vs `/etc/localtime` fix<br>• Pre-pulling new / custom build-from-source stacks<br>• Custom Docker context and permissions sync in Ansible<br>• Mac Python 3.15 wheel build failures with LiteLLM<br>• Jinja ad-hoc templating conflicts (`{{.Name}}`, Go templates)<br>• Headless container exit on non-TTY stdin (`fd=0`)<br>• June 2026 Dashboard auth requirements<br>• Container naming conflict during compose rename<br>• Cold-boot readiness timing (10–15s)<br>• Openbox menu alternatives & Chromium container flags<br>• Docker BuildKit session deadlock & recovery<br>• TUI reconnect loop (`unsafe_control_permissions`)<br>• Model config in `config.yaml` vs Docker env vars<br>• Container Python env lacking PyYAML (use `hermes config` CLI) |
 | **[references/ecosystem-research.md](references/ecosystem-research.md)** | • LiteLLM Homebrew status & `litellm[proxy]` extras<br>• Chromium shared memory limits (`shm_size: 1gb`)<br>• Alpine (`musl`) vs Debian (`glibc`) for computer-use agents<br>• Debian noVNC & websockify routing / asset paths<br>• Xvfb color depth (24-bit TrueColor) requirements<br>• Handling reasoning models (`reasoning_content`) in LiteLLM<br>• Official multi-arch Docker distribution internals<br>• macOS Desktop App remote gateway protocol & auth flow<br>• LiteLLM `/health` 500 Prisma bug vs `/v1/models`<br>• Hermes native Ollama 404 route probe handling<br>• TUI reconnect backoff ladder mechanism |

@@ -17,6 +17,8 @@ This reference details external ecosystem research, upstream library quirks, arc
 9. [LiteLLM Proxy Health Check vs Inference Endpoints (`/health` 500 Bug)](#9-litellm-proxy-health-check-vs-inference-endpoints-health-500-bug)
 10. [Hermes Native Ollama Route Probes vs OpenAI API Proxy](#10-hermes-native-ollama-route-probes-vs-openai-api-proxy)
 11. [TUI Reconnect Backoff Ladder & WebSocket Ticket Grant](#11-tui-reconnect-backoff-ladder--websocket-ticket-grant)
+12. [Model Aliasing in LiteLLM & Clean Endpoint Routing (`coding-26b`)](#12-model-aliasing-in-litellm--clean-endpoint-routing-coding-26b)
+13. [Gateway In-Memory Daemon State vs Profile Reloading](#13-gateway-in-memory-daemon-state-vs-profile-reloading)
 
 ---
 
@@ -144,3 +146,26 @@ This reference details external ecosystem research, upstream library quirks, arc
   `1s -> 2s -> 4s -> 8s -> 16s -> 30s` (capped at 30s).
   This renders directly on the UI above the prompt as `"─ retrying in 30s (attempt X) "`.
   Inspecting `/home/shawn/docker/hermes/data/logs/tui_gateway_crash.log` will reveal the exact lifecycle transitions.
+
+---
+
+### 12. Model Aliasing in LiteLLM & Clean Endpoint Routing (`coding-26b`)
+* **The Background**:
+  The Mac host runs Ollama serving `gemma4:26b-mlx-code`. In `files/litellm_mac_config.yaml`, three model names are declared:
+  1. `ollama/gemma4:26b-mlx-code`
+  2. `gemma4:26b-mlx-code`
+  3. `coding-26b`
+* **Why Use `coding-26b` over `ollama/...` in Hermes**:
+  When Hermes encounters a model string containing `ollama/`, its client heuristics infer a native Ollama endpoint and probe `/api/tags` and `/api/show` before falling back to `/v1/*` OpenAI completion routes.
+  By aliasing the model as `coding-26b` and setting `provider: "custom"`, Hermes treats LiteLLM strictly as an OpenAI-compatible wire (`POST /v1/chat/completions`), completely avoiding the noisy 404 route probe phase and ensuring clean model labeling in both the CLI and web status bar.
+
+---
+
+### 13. Gateway In-Memory Daemon State vs Profile Reloading
+* **The Mechanism**:
+  `hermes-gateway` runs persistent background processes:
+  * Fast uvicorn REST/WebSocket server for the dashboard
+  * Background s6-rc services (`main-hermes` and `dashboard`)
+  * Node.js TUI client broker
+* **The State Invalidation Trap**:
+  When modifying `/opt/data/config.yaml` or running `hermes config set model.default ...`, the CLI updates the YAML file on disk immediately. However, the long-running uvicorn server and active WebSocket sessions maintain the previously instantiated model client in memory until the container or service is explicitly restarted (`docker restart hermes-gateway`). Always trigger a restart after changing core provider credentials or default model selections.

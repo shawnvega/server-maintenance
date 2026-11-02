@@ -20,7 +20,7 @@ services:
       - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_PASSWORD:-hermesadmin}
       - OPENAI_BASE_URL=http://192.168.4.8:4000/v1
       - OPENAI_API_KEY=${LITELLM_API_KEY:-sk-hermes-mac-secret}
-      - MODEL_NAME=${HERMES_MODEL:-ollama/gemma4:26b-mlx-code}
+      - MODEL_NAME=${HERMES_MODEL:-coding-26b}
     volumes:
       - /home/shawn/docker/hermes/data:/opt/data
       - /etc/localtime:/etc/localtime:ro

@@ -214,6 +214,20 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
    ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -X POST http://192.168.4.8:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
    ```
 
+4. **Verify & Configure Active Model in Hermes**:
+   If the web UI or chat status bar displays an unexpected model (e.g. `opus 4.6`) despite `MODEL_NAME` or `OPENAI_BASE_URL` in `compose.yml`, Hermes is reading its default from persistent `/opt/data/config.yaml`:
+   ```bash
+   # Check resolved model config
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config get model"
+
+   # Configure custom local endpoint
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.default coding-26b"
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.provider custom"
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.8:4000/v1"
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.api_key sk-hermes-mac-secret"
+   ssh shawn@192.168.4.19 "docker restart hermes-gateway"
+   ```
+
 ### Recovery
 Fix host directory permissions to `0755` (`chmod go-w`):
 ```bash

@@ -12,7 +12,7 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | Pre-pull task fails with `[Errno 2] No such file or directory` | New or custom build-from-source stacks have no remote image | [2. Pre-Pulling New / Custom Docker Stacks](#2-pre-pulling-new-or-build-from-source-docker-stacks) |
 | Container fails with missing `Dockerfile` or volume `EACCES` | Ansible only copied `compose.yml`; permissions not synced | [3. Ansible Custom Build Context Synchronization](#3-ansible-synchronization-of-custom-build-contexts) |
 | `pipx install "litellm[proxy]"` fails with PyO3 / maturin errors | Python 3.15 pre-release has no pre-compiled wheels on macOS | [4. Mac Python 3.15 LiteLLM Wheel Failures](#4-mac-python-315-pre-release-incompatibility-with-litellm-wheels) |
-| `Syntax error in template: unexpected '.'` on ad-hoc commands | `-a` string evaluates Jinja expressions on `{{.Name}}` | [5. Ansible Ad-hoc Jinja Templating Conflicts](#5-ansible-ad-hoc-jinja-templating-conflicts) |
+| `Syntax error in template: unexpected '.'` on ad-hoc commands | `-a` string evaluates Jinja expressions on `{{.Name}}` / Go templates | [5. Ansible Ad-hoc Jinja Templating Conflicts](#5-ansible-ad-hoc-jinja-templating-conflicts) |
 | Container logs `Warning: Input is not a terminal (fd=0)` & exits 0 | Default entrypoint starts interactive CLI without daemon flag | [6. Headless Container Exit on Non-TTY Stdin](#6-headless-container-exit-on-non-tty-stdin-fd0) |
 | `HERMES_DASHBOARD_INSECURE no longer disables the auth gate` | Upstream June 2026 hardening requires basic auth or OAuth | [7. Dashboard Authentication Hardening](#7-june-2026-dashboard-authentication-hardening) |
 | `Conflict. The container name "/hermes-desktop" is already in use` | Service renamed in compose before removing old container | [8. Docker Compose Service Renaming Conflicts](#8-docker-compose-service-renaming-conflicts) |
@@ -20,6 +20,8 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | `Failed to execute child process "x-terminal-emulator"` or Chromium fails | Missing package / Chromium requires `--no-sandbox` in Docker | [10. Missing Openbox Menu Executables](#10-missing-openbox-menu-executables) |
 | `healthcheck failed fatally: only one connection allowed` | BuildKit session deadlocked after abnormal termination | [11. Docker BuildKit Session Deadlock](#11-docker-buildkit-session-deadlock) |
 | Countdown banner `"─ retrying in 30s"` & `unsafe_control_permissions` | `/opt/data` is world-writable (`0777`); must be `0755` | [12. TUI Gateway Reconnect Loop](#12-tui-gateway-reconnect-loop-on-world-writable-workspace) |
+| Web UI / TUI shows wrong model (e.g. `opus 4.6`) despite env vars | Hermes reads model config from `/opt/data/config.yaml` | [13. Model Configuration in `config.yaml`](#13-hermes-model-configuration-in-configyaml) |
+| `ModuleNotFoundError: No module named 'yaml'` inside container | `/opt/hermes/.venv` lacks PyYAML; use `hermes config` CLI | [14. In-Container Ad-Hoc Python Introspection](#14-in-container-ad-hoc-python-introspection) |
 
 ---
 
@@ -136,14 +138,16 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 
 ### 5. Ansible Ad-hoc Jinja Templating Conflicts
 * **The Symptom**:
-  Running commands like `.venv/bin/ansible ... -m command -a "docker stats --format '{{.Name}}'"` crashes before execution:
+  Running commands like `.venv/bin/ansible ... -m command -a "docker stats --format '{{.Name}}'"` or `docker inspect --format '{{json .Config.Env}}'` crashes before execution:
   ```text
   [ERROR]: Task failed: Syntax error in template: unexpected '.'
+  # or:
+  [ERROR]: Task failed: Finalization of task args for 'ansible.builtin.command' failed: Error while resolving value for '_raw_params': 'json' is undefined
   ```
 * **Root Cause**:
-  Ansible automatically runs Jinja2 evaluation on arguments passed via `-a`. Double curly braces `{{ ... }}` are parsed as Ansible template expressions rather than Docker format strings.
+  Ansible automatically runs Jinja2 evaluation on arguments passed via `-a`. Any double curly braces `{{ ... }}` (such as Docker Go template formatting) are parsed as Ansible template expressions rather than remote command strings.
 * **The Fix**:
-  Avoid double curly braces in `-a` ad-hoc strings. Use standard command output (`docker stats --no-stream`, `docker ps`) or wrap the command inside a single-quoted shell script or playbook task with `{% raw %} ... {% endraw %}`.
+  Avoid double curly braces in `-a` ad-hoc strings. Use standard non-formatted command output (e.g. `docker exec <container> env`, `docker stats --no-stream`, `docker ps`), wrap the command inside a single-quoted shell script, or use playbook tasks with `{% raw %} ... {% endraw %}`.
 
 ---
 
@@ -287,3 +291,48 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
   [tui-parent] [lifecycle] attached shared gateway recover url=ws://127.0.0.1:57817/api/ws
   ```
   and the retry banner disappears. Keep `mode: '0755'` in `tasks/restart_docker_stack.yml`.
+
+---
+
+### 13. Hermes Model Configuration in `config.yaml`
+* **The Symptom**:
+  The web chat or desktop TUI status bar displays an unexpected default model (e.g. `opus 4.6` in `─ ready │ opus 4.6 │ ...`) even when environment variables like `MODEL_NAME` or `OPENAI_BASE_URL` are passed in `compose.yml`.
+* **Root Cause**:
+  Upstream Hermes Agent manages model profiles directly in `/opt/data/config.yaml` (under the `model` block: `default`, `provider`, `base_url`, `api_key`). Docker environment variables like `MODEL_NAME` or `.env` `LLM_MODEL` are not used by the runtime when persistent configuration exists in the profile workspace.
+* **The Fix**:
+  Configure the model directly via the `hermes config` CLI inside `hermes-gateway`:
+  ```bash
+  # Set default model name (matching LiteLLM or Ollama model)
+  docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.default coding-26b
+
+  # Set provider to custom OpenAI-compatible endpoint
+  docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.provider custom
+
+  # Set base URL to LiteLLM proxy on the host Mac
+  docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.8:4000/v1
+
+  # Set API key for LiteLLM Bearer authentication
+  docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.api_key sk-hermes-mac-secret
+
+  # Restart gateway to reload the runtime
+  docker restart hermes-gateway
+  ```
+  Verify active model resolution with `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes status`.
+
+---
+
+### 14. In-Container Ad-Hoc Python Introspection
+* **The Symptom**:
+  Running ad-hoc Python one-liners inside `hermes-gateway` to inspect YAML configuration fails:
+  ```bash
+  docker exec hermes-gateway /opt/hermes/.venv/bin/python -c "import yaml; ..."
+  # Returns: ModuleNotFoundError: No module named 'yaml'
+  ```
+* **Root Cause**:
+  The `nousresearch/hermes-agent` virtual environment (`/opt/hermes/.venv`) does not install the third-party `PyYAML` package directly; it uses `ruamel.yaml` and internal CLI abstractions.
+* **The Fix**:
+  Use the built-in CLI commands rather than ad-hoc Python scripts:
+  * Inspect full configuration: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config show`
+  * Inspect resolved config path: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config path`
+  * Inspect a specific section or key: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config get model`
+  * Inspect active status & providers: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes status`
