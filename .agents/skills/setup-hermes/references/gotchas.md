@@ -22,6 +22,9 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | Countdown banner `"─ retrying in 30s"` & `unsafe_control_permissions` | `/opt/data` is world-writable (`0777`); must be `0755` | [12. TUI Gateway Reconnect Loop](#12-tui-gateway-reconnect-loop-on-world-writable-workspace) |
 | Web UI / TUI shows wrong model (e.g. `opus 4.6`) despite env vars | Hermes reads model config from `/opt/data/config.yaml` | [13. Model Configuration in `config.yaml`](#13-hermes-model-configuration-in-configyaml) |
 | `ModuleNotFoundError: No module named 'yaml'` inside container | `/opt/hermes/.venv` lacks PyYAML; use `hermes config` CLI | [14. In-Container Ad-Hoc Python Introspection](#14-in-container-ad-hoc-python-introspection) |
+| LiteLLM port 4000 exposed to entire LAN on Mac | Default binding to 0.0.0.0 is open without firewall rules | [15. Mac Host Port 4000 Firewall Exposure](#15-mac-host-port-4000-firewall-exposure-macos-pf) |
+| Fresh deploy resets model to `opus 4.6` unless manually configured | Profile `config.yaml` is missing on fresh deployments | [16. Profile Pre-Seeding via `config.yaml.j2`](#16-automatic-profile-pre-seeding-via-configyaml) |
+| Hermes shows 256k context window (`.../256k`) instead of 128k | Base architecture metadata reports 256k; LiteLLM lacks `model_info` | [17. Context Window Mismatch (128k vs 256k)](#17-context-window-mismatch-128k-vs-256k-between-ollama-litellm-and-hermes) |
 
 ---
 
@@ -336,3 +339,38 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
   * Inspect resolved config path: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config path`
   * Inspect a specific section or key: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config get model`
   * Inspect active status & providers: `docker exec hermes-gateway /opt/hermes/.venv/bin/hermes status`
+
+---
+
+### 15. Mac Host Port 4000 Firewall Exposure (macOS PF)
+* **The Symptom**:
+  LiteLLM is started with `--host 0.0.0.0 --port 4000`, making the LLM inference proxy reachable by any device on the local network (192.168.4.x).
+* **Root Cause**:
+  Binding to all interfaces is necessary so the Fedora container (`192.168.4.19`) can send API requests across the LAN, but macOS has no per-port daemon isolation by default without Packet Filter (`pf`).
+* **The Fix**:
+  Isolate port 4000 using a dedicated macOS Packet Filter anchor:
+  1. Create `/etc/pf.anchors/litellm.rules`:
+     ```text
+     block in proto tcp to any port 4000
+     pass in quick proto tcp from 127.0.0.1 to any port 4000
+     pass in quick proto tcp from 192.168.4.19 to any port 4000
+     ```
+  2. Validate and load the anchor into the active firewall:
+     ```bash
+     sudo pfctl -vnf /etc/pf.anchors/litellm.rules
+     sudo pfctl -a litellm -f /etc/pf.anchors/litellm.rules
+     sudo pfctl -a litellm -sr
+     ```
+
+---
+
+### 16. Automatic Profile Pre-Seeding via `config.yaml`
+* **The Symptom**:
+  When spinning up a new Hermes deployment or after wiping the data directory `/home/shawn/docker/hermes/data`, the chat interface defaults to `opus 4.6` despite environment variables in `compose.yml` (`MODEL_NAME=coding-26b`, `OPENAI_BASE_URL=...`), requiring manual CLI intervention.
+* **Root Cause**:
+  Hermes prioritizes persistent profile settings in `/opt/data/config.yaml`. If the file does not exist, Hermes creates a default configuration pointing to Anthropic/Opus rather than reading Docker compose environment variables.
+* **The Fix**:
+  Ansible automatically templates `compose/192.168.4.19/hermes/config.yaml.j2` into `/home/shawn/docker/hermes/data/config.yaml` with `force: false`.
+  This ensures:
+  1. On first-run or clean deployments, the profile is pre-initialized with `model.default: coding-26b`, `provider: custom`, and `base_url: http://192.168.4.8:4000/v1`.
+  2. Any subsequent in-app or CLI customizations made by the user are preserved and never overwritten by future Ansible runs.

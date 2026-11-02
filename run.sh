@@ -27,6 +27,7 @@ usage() {
   echo "  check-host5          Inspect Host 5 (192.168.4.5) standalone upgrade & health status"
   echo "  deploy-host5         Deploy standalone upgrade script to Host 5 (192.168.4.5)"
   echo "  upgrade-host5        Trigger detached standalone maintenance on Host 5 (192.168.4.5)"
+  echo "  test-hermes          Verify Hermes Gateway, Desktop, TUI grant & LiteLLM connectivity"
   echo "  change-password      Change login password on all servers and PiKVM admin"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
@@ -78,6 +79,9 @@ case "${CMD}" in
     ;;
   upgrade-mac|upgrade-local)
     exec "${SCRIPT_DIR}/upgrade_mac.sh" "$@"
+    ;;
+  test-hermes|verify-hermes)
+    exec "${SCRIPT_DIR}/.agents/skills/setup-hermes/scripts/verify_hermes.sh" "$@"
     ;;
 esac
 

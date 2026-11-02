@@ -60,6 +60,15 @@
     mode: '0755'
   when: (stack_item | basename) == 'hermes'
 
+- name: "Ensure baseline config.yaml exists for hermes workspace"
+  tags: [docker]
+  ansible.builtin.template:
+    src: "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/config.yaml.j2"
+    dest: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/config.yaml"
+    mode: '0644'
+    force: false
+  when: (stack_item | basename) == 'hermes'
+
 - name: "Template .env file for {{ stack_item }}"
   tags: [docker]
   ansible.builtin.template:
