@@ -1,6 +1,10 @@
 # /etc/caddy/Caddyfile
 # Managed by Ansible - local edits will be overwritten
 
+http://192.168.4.5 {
+	reverse_proxy 127.0.0.1:3001
+}
+
 immich.vvvega.com {
 	reverse_proxy 192.168.4.4:2283 {
 		header_up Host {host}
@@ -10,11 +14,5 @@ immich.vvvega.com {
 www.vvvega.com {
 	respond "503 Service Unavailable - WordPress decommissioned" 503 {
 		close
-	}
-}
-
-llm.vvvega.com {
-	reverse_proxy localhost:3000 {
-		header_up Host {host}
 	}
 }

@@ -1,0 +1,83 @@
+---
+- Core Infrastructure:
+    - Semaphore:
+        icon: semaphore.png
+        href: http://192.168.4.5:3000
+        description: Ansible Automation Controller (Pi 5)
+        server: local-docker
+        container: semaphore
+    - PiKVM:
+        icon: pikvm.png
+        href: https://192.168.4.66
+        description: Remote Hardware Console (Arch ARM)
+        ping: 192.168.4.66
+    - Caddy Proxy:
+        icon: caddy.png
+        href: http://192.168.4.5
+        description: Native Reverse Proxy & TLS (Pi 5)
+
+- Automation & AI:
+    - Hermes Desktop:
+        icon: hermes.png
+        href: http://192.168.4.19:6080
+        description: Agent Web Desktop & Browser (Fedora)
+        ping: 192.168.4.19
+    - Hermes Gateway:
+        icon: robot.png
+        href: http://192.168.4.19:9119
+        description: Agent Gateway API (Fedora)
+    - OpenClaw Gateway (UTM):
+        icon: mac.png
+        href: http://192.168.64.6:18789
+        description: Local Ollama Gateway (Debian 13 VM)
+    - OpenClaw Exp (UTM):
+        icon: mac.png
+        href: http://192.168.64.9:18789
+        description: Experimental Ollama Gateway (Debian 13 VM)
+
+- Media & Storage:
+    - Immich:
+        icon: immich.png
+        href: https://immich.vvvega.com
+        description: Photo & Video Management (Pi 4)
+    - Jellyfin:
+        icon: jellyfin.png
+        href: http://192.168.4.4:8096
+        description: Media Streaming Server (Pi 4)
+    - Syncthing:
+        icon: syncthing.png
+        href: http://192.168.4.4:8384
+        description: Peer-to-Peer File Sync (Pi 4)
+
+- Monitoring:
+    - Glances Pi 5:
+        icon: glances.png
+        href: http://192.168.4.5:61208
+        description: Pi 5 System & Docker Metrics
+        widget:
+          type: glances
+          url: http://192.168.4.5:61208
+          version: 4
+          metric: cpu
+    - Glances Pi 4:
+        icon: glances.png
+        href: http://192.168.4.4:61208
+        description: Pi 4 System & Storage Metrics
+        widget:
+          type: glances
+          url: http://192.168.4.4:61208
+          version: 4
+          metric: cpu
+    - Glances Hermes (Fedora):
+        icon: glances.png
+        href: http://192.168.4.19:61208
+        description: Fedora Workstation & GPU Metrics
+        widget:
+          type: glances
+          url: http://192.168.4.19:61208
+          version: 4
+          metric: cpu
+    - Frigate NVR:
+        icon: frigate.png
+        href: http://192.168.4.19:5000
+        description: Camera Object Detection (Fedora)

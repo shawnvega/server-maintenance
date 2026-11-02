@@ -1,0 +1,14 @@
+services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PUID=1000
+      - PGID=990
+      - HOMEPAGE_ALLOWED_HOSTS=192.168.4.5,192.168.4.5:3001,localhost,localhost:3001,127.0.0.1,127.0.0.1:3001,*.vvvega.com,*.local,*.home,*.lan,*

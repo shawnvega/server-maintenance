@@ -235,6 +235,14 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
    * Add explicit `model_info` (`max_input_tokens: 131072`, `max_output_tokens: 8192`) in `files/litellm_mac_config.yaml`.
    * Reload LiteLLM via `launchctl` and restart `hermes-gateway`.
 
+6. **`hermes: command not found` in Virtual Desktop LXTerminal**:
+   * **Root Cause**: The web desktop (`http://192.168.4.19:6080`) runs inside `hermes-desktop`, an unprivileged sandbox for UI automation. The agent runtime and `hermes` CLI exist exclusively inside `hermes-gateway`.
+   * **Fix**: Run commands targeting `hermes-gateway` via `docker exec`:
+     ```bash
+     ssh shawn@192.168.4.19 'docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes <command>'
+     ```
+     See [docs/workflows.md](workflows.md#8-executing-commands-inside-docker-containers) for details.
+
 ### Recovery
 Fix host directory permissions to `0755` (`chmod go-w`):
 ```bash
@@ -245,3 +253,45 @@ The TUI client will immediately attach on the next tick:
 [tui-parent] [lifecycle] attached shared gateway recover url=ws://127.0.0.1:...
 ```
 and the countdown banner will disappear. Ensure `tasks/restart_docker_stack.yml` keeps `mode: '0755'`.
+
+---
+
+## 9. Homepage Dashboard Common Errors (`192.168.4.5`)
+
+### 1. Host Validation Failed (`400 Bad Request`)
+* **Symptom**: Accessing `http://192.168.4.5:3001` or `http://192.168.4.5` returns HTTP 400 with `{"error":"Host validation failed. See logs for more details."}`.
+* **Root Cause**: Modern Next.js 16 host header protection requires authorized hosts/ports.
+* **Fix**: Ensure `HOMEPAGE_ALLOWED_HOSTS` environment variable is defined in `compose/192.168.4.5/homepage/docker-compose.yml`:
+  ```yaml
+  environment:
+    - HOMEPAGE_ALLOWED_HOSTS=192.168.4.5,192.168.4.5:3001,localhost,localhost:3001,127.0.0.1,127.0.0.1:3001,*.vvvega.com,*.local,*.home,*.lan,*
+  ```
+
+### 2. Glances Widget: `TypeError: Cannot read properties of undefined (reading 'match')`
+* **Symptom**: Monitoring cards for Glances crash on the frontend with `TypeError: Cannot read properties of undefined (reading 'match')`.
+* **Root Cause**: Homepage's Glances component evaluates `widget.metric.match(...)`. If `metric:` is omitted in `services.yaml`, `widget.metric` is `undefined`, crashing the client runtime.
+* **Fix**: Always specify `metric: cpu` (or `memory`, `containers`, `process`) in `services.yaml`:
+  ```yaml
+  widget:
+    type: glances
+    url: http://192.168.4.5:61208
+    version: 4
+    metric: cpu
+  ```
+
+### 3. Bookmarks: `TypeError: Failed to construct 'URL': Invalid URL`
+* **Symptom**: Quicklinks section crashes with `TypeError: Failed to construct 'URL': Invalid URL`.
+* **Root Cause**: In YAML, putting `- icon:` and `- href:` on separate dashed lines creates two distinct list items; the first item has no `href`, resulting in `new URL(undefined)`.
+* **Fix**: Group all properties under a single dictionary item per bookmark:
+  ```yaml
+  - Homelab Quicklinks:
+      - GitHub:
+          - abbr: GH
+            href: https://github.com/
+            icon: github.png
+  ```
+
+### 4. Docker Socket Permission Denied: `EACCES /var/run/docker.sock`
+* **Symptom**: Homepage logs report `error: <dockerStatuses> Error: connect EACCES /var/run/docker.sock`.
+* **Root Cause**: On Debian/Pi OS, `/var/run/docker.sock` has group ownership `docker` (GID `990`). If Homepage runs with `PGID=1000`, it cannot read the socket.
+* **Fix**: Set `PGID=990` in `compose/192.168.4.5/homepage/docker-compose.yml`.

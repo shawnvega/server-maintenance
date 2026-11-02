@@ -1,0 +1,21 @@
+---
+title: Homelab
+favicon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/server.png
+theme: dark
+color: slate
+
+headerStyle: clean
+
+layout:
+  Core Infrastructure:
+    style: row
+    columns: 3
+  Automation & AI:
+    style: row
+    columns: 4
+  Media & Storage:
+    style: row
+    columns: 3
+  Monitoring:
+    style: row
+    columns: 4

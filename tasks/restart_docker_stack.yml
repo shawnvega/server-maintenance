@@ -92,3 +92,25 @@
   register: docker_up_out
   changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout or 'Building' in docker_up_out.stdout"
   failed_when: docker_up_out.rc != 0
+
+- name: "Sync Semaphore admin password from vault"
+  tags: [docker]
+  when:
+    - (stack_item | basename) == 'semaphore'
+    - semaphore_admin_password is defined
+  ansible.builtin.shell:
+    cmd: >
+      docker exec semaphore semaphore users change-by-login
+      --login admin
+      --password "{{ semaphore_admin_password }}"
+      --config /etc/semaphore/config.json
+      ||
+      docker exec semaphore semaphore users add
+      --admin
+      --login admin
+      --name Admin
+      --email admin@localhost
+      --password "{{ semaphore_admin_password }}"
+      --config /etc/semaphore/config.json
+  no_log: true
+  changed_when: true

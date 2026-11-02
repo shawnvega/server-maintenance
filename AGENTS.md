@@ -7,7 +7,7 @@ This repository manages automation and configuration for self-hosted home server
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml`, `semaphore`, native Caddy reverse proxy |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0`, `hermes` (gateway `:9119` + desktop `:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
@@ -87,6 +87,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 ./run.sh scrub-btrfs --all               # Start Btrfs scrub across all hosts
 
 # Service Maintenance
+./run.sh homepage                      # Deploy & update Homepage dashboard (.5)
 ./run.sh caddy                           # Validate & reload native Caddy reverse proxy
 ./run.sh cleanup -K                      # Vacuum journals, clean package caches, prune docker
 ./run.sh restart-vlc                     # Restart persistent VLC RTSP stream (.18)
@@ -95,7 +96,9 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 ./run.sh upgrade-host5 -K                # Trigger detached standalone upgrade for Host 5
 ./run.sh backup-data -K                  # Sync Immich DB & data shares to Pi 5
 
-# Ad-hoc Shell Commands
+# Ad-hoc Shell & Container Commands
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
+./run.sh raw 'docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes profile list' --limit 192.168.4.19
+ssh -t shawn@192.168.4.19 'docker exec -it -u hermes hermes-gateway bash'
 ```

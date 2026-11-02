@@ -37,7 +37,7 @@ LOG_FILE="${LOG_DIR}/upgrade_host5.log"
 STATUS_FILE="${LOG_DIR}/upgrade_host5.status"
 BACKUP_DEVICE="/dev/mmcblk0"
 LOAD_THRESHOLD=6.0
-DOCKER_STACKS=("docker/glances" "docker/immich-ml" "docker/semaphore")
+DOCKER_STACKS=("docker/glances" "docker/immich-ml" "docker/semaphore" "docker/homepage")
 
 # Ensure logs directory exists
 mkdir -p "${LOG_DIR}"

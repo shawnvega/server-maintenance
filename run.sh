@@ -22,6 +22,7 @@ usage() {
   echo "  scrub-btrfs          Start Btrfs background scrub on storage pools (default: 192.168.4.5)"
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
+  echo "  homepage             Deploy and update Homepage dashboard on Pi 5 (192.168.4.5)"
   echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
   echo "  shutdown-php         Decommission and shut down WordPress & PHP workloads"
   echo "  check-host5          Inspect Host 5 (192.168.4.5) standalone upgrade & health status"
@@ -158,6 +159,9 @@ case "${CMD}" in
     ;;
   restart-vlc)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/upgrade.yml" --tags vlc --limit 192.168.4.18 -e "force_vlc_restart=true" "$@"
+    ;;
+  homepage)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_homepage.yml" "$@"
     ;;
   caddy|proxy)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/caddy.yml" "$@"

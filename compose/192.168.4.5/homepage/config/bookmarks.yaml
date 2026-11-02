@@ -1,0 +1,10 @@
+---
+- Homelab Quicklinks:
+    - GitHub:
+        - abbr: GH
+          href: https://github.com/
+          icon: github.png
+    - Router Admin:
+        - abbr: RT
+          href: http://192.168.4.1/
+          icon: router.png

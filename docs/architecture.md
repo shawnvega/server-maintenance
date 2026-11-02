@@ -9,7 +9,7 @@ This document details the hardware, network topology, operating systems, storage
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `immich-ml`, `semaphore`, native Caddy reverse proxy |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC RTSP stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | `glances0`, `frigate0`, `hermes` (gateway `:9119` + desktop `:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink` |
@@ -42,7 +42,17 @@ This document details the hardware, network topology, operating systems, storage
   * External 3-Device Btrfs Pool: Dedicated Btrfs RAID 1 (`-d raid1 -m raid1`, `compress=zstd:3,noatime,nofail`) mounted on `/var` across `/dev/sda` (7.6 GB USB microSD reader), `/dev/sdb` (7.5 GB USB thumb drive), and `/dev/sdc` (59.5 GB SD card).
 * **Automation**: Partitioning, formatting, data migration, and fstab updates are automated via `migrate_var_btrfs.yml`. See [storage-btrfs.md](storage-btrfs.md) for details.
 
-### 4. Read-Only Comparison: OverlayFS Pi vs Native PiKVM
+### 4. Homepage Dashboard & Reverse Proxy (`192.168.4.5`)
+* **Host Environment**: Raspberry Pi 5 running native Caddy reverse proxy and Docker compose stacks.
+* **Architecture**:
+  * `homepage` (`ghcr.io/gethomepage/homepage:latest`): Centralized homelab command dashboard providing real-time widgets, Glances metrics across nodes, Docker container state tracking, and direct bookmarks.
+  * **Network Ports & Ingress**:
+    * Direct container port: `http://192.168.4.5:3001`
+    * Caddy native reverse proxy: Ingress on port 80 (`http://192.168.4.5`) automatically proxies to Homepage at `127.0.0.1:3001`.
+  * **Permissions & Group Access**: Runs as `PUID=1000` (`shawn`) and `PGID=990` (`docker` group) to grant read-only access to `/var/run/docker.sock` for live container health badges.
+  * **Configuration Source of Truth**: Managed under `compose/192.168.4.5/homepage/config/` (`services.yaml`, `widgets.yaml`, `bookmarks.yaml`, `docker.yaml`, `settings.yaml`). Deployed and reloaded via `./run.sh homepage`.
+
+### 5. Read-Only Comparison: OverlayFS Pi vs Native PiKVM
 
 The cluster operates two distinct read-only appliance implementations with different operational lifecycles:
 
