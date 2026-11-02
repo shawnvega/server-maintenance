@@ -19,6 +19,7 @@ This reference details external ecosystem research, upstream library quirks, arc
 11. [TUI Reconnect Backoff Ladder & WebSocket Ticket Grant](#11-tui-reconnect-backoff-ladder--websocket-ticket-grant)
 12. [Model Aliasing in LiteLLM & Clean Endpoint Routing (`coding-26b`)](#12-model-aliasing-in-litellm--clean-endpoint-routing-coding-26b)
 13. [Gateway In-Memory Daemon State vs Profile Reloading](#13-gateway-in-memory-daemon-state-vs-profile-reloading)
+14. [Context Window Resolution & Metadata Overrides in LiteLLM / Hermes](#14-context-window-resolution--metadata-overrides-in-litellm--hermes)
 
 ---
 
@@ -169,3 +170,26 @@ This reference details external ecosystem research, upstream library quirks, arc
   * Node.js TUI client broker
 * **The State Invalidation Trap**:
   When modifying `/opt/data/config.yaml` or running `hermes config set model.default ...`, the CLI updates the YAML file on disk immediately. However, the long-running uvicorn server and active WebSocket sessions maintain the previously instantiated model client in memory until the container or service is explicitly restarted (`docker restart hermes-gateway`). Always trigger a restart after changing core provider credentials or default model selections.
+
+---
+
+### 14. Context Window Resolution & Metadata Overrides in LiteLLM / Hermes
+* **The Background**:
+  Ollama models report two separate metrics when probed via `/api/show`:
+  1. `parameters`: User-defined runtime parameters like `num_ctx: 131072` (128k).
+  2. `model_info`: Native architecture configuration like `gemma4.context_length: 262144` (256k).
+* **The Interaction with LiteLLM & Hermes**:
+  LiteLLM inspects `model_info` from Ollama and reports `max_input_tokens: 262144` on its `/v1/models` route. Hermes's context resolution engine (`agent.model_metadata.get_model_context_length()`) consumes this endpoint directly. If the model alias does not define explicit constraints, Hermes adopts the 256k ceiling.
+* **The Fix**:
+  LiteLLM allows declarative overrides via the `model_info` stanza in its configuration dictionary:
+  ```yaml
+  model_list:
+    - model_name: coding-26b
+      litellm_params:
+        model: ollama_chat/gemma4:26b-mlx-code
+        api_base: http://127.0.0.1:11434
+      model_info:
+        max_input_tokens: 131072
+        max_output_tokens: 8192
+  ```
+  This immediately clamps LiteLLM's advertised capacity to 128k, ensuring Hermes compresses context before Ollama's KV cache limit is exceeded.

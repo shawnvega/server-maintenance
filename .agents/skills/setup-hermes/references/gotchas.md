@@ -374,3 +374,33 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
   This ensures:
   1. On first-run or clean deployments, the profile is pre-initialized with `model.default: coding-26b`, `provider: custom`, and `base_url: http://192.168.4.8:4000/v1`.
   2. Any subsequent in-app or CLI customizations made by the user are preserved and never overwritten by future Ansible runs.
+
+---
+
+### 17. Context Window Mismatch (128k vs 256k) Between Ollama, LiteLLM, and Hermes
+* **The Symptom**:
+  In the Hermes chat header or status bar, the model context limit displays `256k` (e.g. `coding 26b │ 17.2k/256k`), even though the underlying Ollama model was explicitly configured with `num_ctx 131072` (128k).
+* **Root Cause**:
+  1. In Ollama, running `curl http://127.0.0.1:11434/api/show -d '{"name": "gemma4:26b-mlx-code"}'` reveals two distinct context fields:
+     - `parameters.num_ctx: 131072` (the configured runtime KV cache limit).
+     - `model_info.gemma4.context_length: 262144` (the base model architecture definition).
+  2. LiteLLM queries the Ollama model architecture and reports `max_input_tokens: 262144` on `GET /v1/models`, completely ignoring Ollama's runtime `num_ctx` setting.
+  3. When an alias like `coding-26b` is configured without explicit token metadata, Hermes resolves context bounds from LiteLLM's advertised model limit or falls back to the 256k ceiling.
+  4. **The Hazard**: Hermes's internal context compressor and sliding-window pruner would not engage until past 200k tokens, but Ollama's KV cache is capped at 128k, causing upstream inference errors and failed completions.
+* **The Fix**:
+  Explicitly specify `model_info` under each model entry in `files/litellm_mac_config.yaml`:
+  ```yaml
+    - model_name: coding-26b
+      litellm_params:
+        model: ollama_chat/gemma4:26b-mlx-code
+        api_base: http://127.0.0.1:11434
+      model_info:
+        max_input_tokens: 131072
+        max_output_tokens: 8192
+  ```
+  Then reload LiteLLM and restart the gateway:
+  ```bash
+  launchctl bootout gui/$(id -u)/com.litellm.proxy
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.litellm.proxy.plist
+  ssh shawn@192.168.4.19 "docker restart hermes-gateway"
+  ```
