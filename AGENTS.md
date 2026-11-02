@@ -39,6 +39,8 @@ This repository isolates Ansible and its dependencies in a project-local virtual
    * Never run `apt`, `dpkg`, or `raspi-config` on PiKVM. Updates run strictly via `/usr/bin/pikvm-update --no-reboot`.
 6. **Semaphore Runner Safety (`192.168.4.5`)**:
    * When running from Semaphore UI, Host 5 is safely skipped in master playbooks. Use `check-host5`, `deploy-host5`, or `upgrade-host5` for Host 5 maintenance.
+7. **Hermes Workspace Permissions (`192.168.4.19`)**:
+   * Host data directory `/home/shawn/docker/hermes/data` must strictly be mode `0755` (`go-w`) and owned by UID 1000 (`shawn`). Never set `0777` (world-writable), which fails Hermes internal security gates (`unsafe_control_permissions`) and traps the chat TUI in an endless 30s reconnect loop.
 
 ---
 
@@ -53,7 +55,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 | **Btrfs Storage & Scrubs** | [docs/storage-btrfs.md](docs/storage-btrfs.md) | Health checks (`check-btrfs`), scrubs (`scrub-btrfs`), RAID 1 `/var` migration & drive replacement |
 | **Read-Only Appliances** | [docs/appliances.md](docs/appliances.md) | OverlayFS Pi (`.11`) RW/RO lifecycle & recovery, Arch PiKVM (`.66`) mounts & `pikvm-update` |
 | **Workflows, Caddy & Vault** | [docs/workflows.md](docs/workflows.md) | Native Caddy reload, Host 5 Semaphore safety, Immich sync, password update, Vault rekey |
-| **Troubleshooting & Recovery** | [docs/troubleshooting.md](docs/troubleshooting.md) | High loadavg halts, backup failures, Btrfs error stats, RO rescue commands, VLC restart |
+| **Troubleshooting & Recovery** | [docs/troubleshooting.md](docs/troubleshooting.md) | High loadavg halts, backup failures, Btrfs error stats, RO rescue commands, VLC restart, Hermes reconnect loops |
 
 ---
 

@@ -169,3 +169,58 @@ If display errors occur, ensure X11 display session `:0` is active:
 ```bash
 ssh shawn@192.168.4.18 'DISPLAY=:0 xrandr'
 ```
+
+---
+
+## 7. Hermes Agent Reconnect Loops & LLM Diagnostics (`192.168.4.19`)
+
+### Symptoms
+When accessing Hermes via web browser or native desktop app (`http://192.168.4.19:9119`), a banner counts down above the prompt:
+```text
+─ retrying in 30s (attempt 9)
+```
+or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gateway_crash.log`:
+```text
+[tui-parent] [lifecycle] scheduling gateway reconnect in 30000ms (attempt X)
+```
+
+### Root Causes
+1. **Unsafe Workspace Permissions (`unsafe_control_permissions`)**:
+   Hermes strictly validates POSIX permissions on `/opt/data`. If the data directory is world-writable (`mode: 0777`), `gateway_bootstrap.py` refuses to connect to protect the control channel:
+   ```text
+   gateway inaccessible: unsafe_control_permissions: /opt/data has mode 0777, writable by another user; chmod go-w /opt/data
+   ```
+2. **UID Mismatch**:
+   Inside the container, `gateway_bootstrap.py` must run as the `hermes` user (UID 1000). Running ad-hoc commands as `root` (UID 0) falsely expects UID 0 directory ownership.
+3. **Misinterpreting LiteLLM `/health`**:
+   Calling `GET /health` on LiteLLM returns `HTTP 500` with `ModuleNotFoundError: No module named 'prisma'` when no database is configured. This is a harmless upstream bug; LiteLLM's inference endpoints (`/v1/models`, `/v1/chat/completions`) work properly.
+
+### Investigation & Verification
+
+1. **Verify Internal Gateway Bootstrap**:
+   ```bash
+   ssh shawn@192.168.4.19 "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/python /opt/hermes/ui-tui/scripts/gateway_bootstrap.py"
+   ```
+   * Succeeded if it returns a JSON grant: `{"url": "ws://...", "protocols": [...]}`.
+   * Failed if it returns `unsafe_control_permissions` or `unsafe_control_path`.
+
+2. **Verify LiteLLM Connectivity from Container to Mac**:
+   ```bash
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -H 'Authorization: Bearer sk-hermes-mac-secret' http://192.168.4.8:4000/v1/models"
+   ```
+
+3. **Verify LLM Inference Completion**:
+   ```bash
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -X POST http://192.168.4.8:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
+   ```
+
+### Recovery
+Fix host directory permissions to `0755` (`chmod go-w`):
+```bash
+ssh shawn@192.168.4.19 'chmod 755 /home/shawn/docker/hermes/data'
+```
+The TUI client will immediately attach on the next tick:
+```text
+[tui-parent] [lifecycle] attached shared gateway recover url=ws://127.0.0.1:...
+```
+and the countdown banner will disappear. Ensure `tasks/restart_docker_stack.yml` keeps `mode: '0755'`.

@@ -66,7 +66,7 @@ Detailed architecture, lifecycle procedures, and troubleshooting guides are orga
 * 💾 **[Btrfs Storage Architecture & Scrubs](docs/storage-btrfs.md)**: Health checks, pool scrubs, scrub safety gates, `/var` RAID 1 migration, and live drive replacement.
 * 🔒 **[Read-Only Appliances](docs/appliances.md)**: Maintenance lifecycles, remount mechanics, and verification for OverlayFS Pi (`.11`) and Arch Linux PiKVM (`.66`).
 * ⚙️ **[Specialized Workflows & Services](docs/workflows.md)**: Caddy reverse proxy deployment, Semaphore runner safety, data share/Immich sync, password rotation, Docker secrets, and Ansible Vault rekeying.
-* 🛠️ **[Troubleshooting Runbooks](docs/troubleshooting.md)**: Recovery steps for high load halts, `rpi-clone` backup failures, drive degradation, read-only lock failures, and VLC stream freezes.
+* 🛠️ **[Troubleshooting Runbooks](docs/troubleshooting.md)**: Recovery steps for high load halts, `rpi-clone` backup failures, drive degradation, read-only lock failures, VLC stream freezes, and Hermes reconnect loops.
 
 ---
 

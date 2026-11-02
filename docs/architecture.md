@@ -26,6 +26,7 @@ This document details the hardware, network topology, operating systems, storage
 * **Architecture**:
   * `hermes-gateway` (`nousresearch/hermes-agent:latest`): Authenticated REST/WebSocket agent runtime and dashboard on port `9119` (`http://192.168.4.19:9119`). Connects to local Ollama on the host Mac (`192.168.4.8:4000`) via LiteLLM proxy with Bearer token authentication.
   * `hermes-desktop` (`hermes-desktop:minimal`): Sandboxed X11 / Openbox / noVNC virtual desktop on port `6080` (`http://192.168.4.19:6080`), pre-configured with LXTerminal, Chromium (`--no-sandbox`), and ObConf.
+  * **Workspace Storage & Permissions**: `/home/shawn/docker/hermes/data` mounted to `/opt/data` (gateway) and `/home/hermes/workspace` (desktop). Must strictly be mode `0755` (`go-w`) owned by UID 1000; mode `0777` trips Hermes POSIX security validation (`unsafe_control_permissions`).
 * **Configuration**: Managed under `compose/192.168.4.19/hermes/` and documented in [.agents/skills/setup-hermes/SKILL.md](../.agents/skills/setup-hermes/SKILL.md).
 
 ### 2. OpenClaw UTM VMs (`192.168.64.6`, `192.168.64.9`)

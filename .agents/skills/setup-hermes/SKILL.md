@@ -28,7 +28,7 @@ This skill documents the end-to-end architecture, deployment workflow, critical 
      * Desktop Stack: `Xvfb` (display `:1`), `openbox` window manager (~15MB RAM), `x11vnc`, `noVNC` / `websockify` on port **`6080`**.
      * Role: Sandboxed graphical desktop environment for browser tools, computer use, and visual live inspection.
      * Resource Caps: `mem_limit: 1536m`, `mem_reservation: 512m`, `cpus: 1.0`, `shm_size: 1gb`.
-  * **Shared Workspace**: `/home/shawn/docker/hermes/data` (`mode: 0777`) mounted to `/opt/data` in the gateway and `/home/hermes/workspace` in the desktop sandbox.
+  * **Shared Workspace**: `/home/shawn/docker/hermes/data` (`mode: 0755`, owned by host UID 1000) mounted to `/opt/data` in the gateway and `/home/hermes/workspace` in the desktop sandbox. Must NOT be world-writable (`0777`).
 * **LLM Inference Provider (Host Mac at `192.168.4.8`)**:
   * Engine: Local Ollama serving `gemma4:26b-mlx-code`.
   * Proxy: LiteLLM running on `0.0.0.0:4000` with Bearer token authentication (`sk-hermes-mac-secret`), managed by a persistent user LaunchAgent (`~/Library/LaunchAgents/com.litellm.proxy.plist`).
@@ -114,13 +114,13 @@ This skill documents the end-to-end architecture, deployment workflow, critical 
          mode: '0755'
        when: stack_config_dir_stat.stat.exists and stack_config_dir_stat.stat.isdir
      ```
-  3. Ensure the host workspace directory has `0777` permissions so the unprivileged container user (`hermes`, UID 1000) can read and write files without being blocked by host permissions:
+  3. Ensure the host workspace directory has `0755` permissions (owned by host UID 1000 `shawn`) so the unprivileged container user (`hermes`, UID 1000) can read and write files without triggering Hermes's security check against world-writable directories (`mode 0777`):
      ```yaml
      - name: "Ensure data workspace directory exists for hermes"
        ansible.builtin.file:
          path: "{{ ansible_facts['user_dir'] }}/docker/hermes/data"
          state: directory
-         mode: '0777'
+         mode: '0755'
        when: (stack_item | basename) == 'hermes'
      ```
   4. Dynamically append `--build` to `docker compose up -d` if a `Dockerfile` exists:
@@ -262,6 +262,51 @@ This skill documents the end-to-end architecture, deployment workflow, critical 
 
 ---
 
+### L. TUI Gateway Reconnect Loop on World-Writable Workspace (`unsafe_control_permissions`)
+* **The Symptom**:
+  When opening the Hermes chat interface (Web UI or Desktop connected to port `9119`), a countdown banner appears directly above the chat prompt:
+  ```text
+  ─ retrying in 30s (attempt 9)
+  ```
+  and `tui_gateway_crash.log` repeatedly logs:
+  ```text
+  [tui-parent] 2026-11-02T00:22:50.725Z [lifecycle] scheduling gateway reconnect in 1000ms (attempt 1)
+  ...
+  [tui-parent] 2026-11-02T00:23:25.875Z [lifecycle] scheduling gateway reconnect in 30000ms (attempt 6)
+  [tui-parent] 2026-11-02T00:24:58.163Z [lifecycle] scheduling gateway reconnect in 30000ms (attempt 9)
+  ```
+* **Root Cause & Architecture**:
+  The chat terminal runs a Node.js TUI client (`/opt/hermes/ui-tui/dist/entry.js`), which executes `gateway_bootstrap.py` under Python to acquire an internal WebSocket grant (`ws://127.0.0.1:<port>/api/ws`) and an ephemeral authentication ticket (`hermes-gateway-ticket.<token>`) from the background gateway daemon.
+  Hermes enforces strict POSIX security permissions on its data directory (`/opt/data`):
+  1. **Mode Check**: If the directory has world-writable permissions (`0777`), `gateway_bootstrap.py` fails with:
+     ```text
+     gateway inaccessible: unsafe_control_permissions
+     gateway inaccessible: /opt/data has mode 0777, writable by another user; chmod go-w /opt/data
+     ```
+  2. **UID Check**: If run under `root` (UID 0), `gateway_bootstrap.py` expects the directory to be owned by UID 0. It must run as the `hermes` container user (UID 1000).
+  When `gateway_bootstrap.py` exits non-zero, `gatewayClient.ts` enters an exponential backoff reconnect loop (1s, 2s, 4s, 8s, 16s, capped at 30s), rendering the banner in the UI.
+* **Diagnostics**:
+  Test running the bootstrap script directly as user `hermes` inside the container:
+  ```bash
+  ssh shawn@192.168.4.19 "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/python /opt/hermes/ui-tui/scripts/gateway_bootstrap.py"
+  ```
+  A healthy gateway outputs JSON:
+  ```json
+  {"url": "ws://127.0.0.1:57817/api/ws", "protocols": ["hermes-gateway-v1", "hermes-gateway-ticket.xyz..."], "profile_id": "/opt/data", "instance_id": "..."}
+  ```
+* **The Fix**:
+  Ensure the host data directory is owned by host UID 1000 (`shawn`) and has permissions `0755` (`chmod go-w /home/shawn/docker/hermes/data`):
+  ```bash
+  ssh shawn@192.168.4.19 'chmod 755 /home/shawn/docker/hermes/data'
+  ```
+  The TUI immediately recovers and logs:
+  ```text
+  [tui-parent] [lifecycle] attached shared gateway recover url=ws://127.0.0.1:57817/api/ws
+  ```
+  and the retry banner disappears. Keep `mode: '0755'` in `tasks/restart_docker_stack.yml`.
+
+---
+
 ## 3. Key Findings from External Ecosystem Research
 
 ### A. LiteLLM Packaging & Homebrew Distribution
@@ -341,6 +386,56 @@ This skill documents the end-to-end architecture, deployment workflow, critical 
 
 ---
 
+### I. LiteLLM Proxy Health Check vs Inference Endpoints (`/health` 500 Bug)
+* **The Symptom**:
+  Running `curl http://127.0.0.1:4000/health` or `http://192.168.4.8:4000/health` returns:
+  ```text
+  HTTP/1.1 500 Internal Server Error
+  Internal Server Error
+  ```
+  and `~/Library/Logs/litellm.error.log` reports `ModuleNotFoundError: No module named 'prisma'`.
+* **Root Cause**:
+  When LiteLLM runs as a stateless local proxy without an external Prisma database configured, its unhandled exception middleware in `proxy_server.py` (`otel_unhandled_exception_handler`) attempts to inspect `PrismaDBExceptionHandler.is_database_infrastructure_error()`, which attempts to import `prisma`. The missing optional database package causes the health endpoint to throw 500.
+* **The Reality**:
+  The core OpenAI inference proxy routes (`/v1/models`, `/v1/chat/completions`) are completely unaffected and work normally.
+* **The Rule**:
+  **Never use `/health` to evaluate LiteLLM proxy status.** Instead, probe the model catalog or test an inference completion:
+  ```bash
+  curl -s -H "Authorization: Bearer sk-hermes-mac-secret" http://192.168.4.8:4000/v1/models
+  ```
+
+---
+
+### J. Hermes Native Ollama Route Probes vs OpenAI API Proxy
+* **The Symptom**:
+  LiteLLM access logs (`~/Library/Logs/litellm.log`) show periodic 404 warnings from Hermes:
+  ```text
+  INFO: 192.168.4.19 - "GET /api/tags HTTP/1.1" 404 Not Found
+  INFO: 192.168.4.19 - "POST /api/show HTTP/1.1" 404 Not Found
+  INFO: 192.168.4.19 - "GET /v1/props HTTP/1.1" 404 Not Found
+  INFO: 192.168.4.19 - "GET /version HTTP/1.1" 404 Not Found
+  ```
+* **Root Cause**:
+  When configured with an Ollama model name prefix (`ollama/...`), Hermes Agent probes native Ollama API endpoints (`/api/tags`, `/api/show`) first to auto-discover context windows and parameter capabilities.
+  Because LiteLLM is strictly an OpenAI-compatible proxy (`/v1/*`), it returns 404 for these native Ollama endpoints.
+* **The Reality**:
+  Hermes catches these 404s gracefully, falls back to `GET /v1/models`, and uses standard OpenAI `/v1/chat/completions`. These 404 log entries are benign.
+
+---
+
+### K. TUI Reconnect Backoff Ladder & WebSocket Ticket Grant
+* **The Mechanism**:
+  When a user connects via browser or desktop to the web terminal on port `9119`, Hermes spawns a Node.js TUI client ([`entry.js`](file:///opt/hermes/ui-tui/dist/entry.js)).
+  The TUI uses `gateway_bootstrap.py` to acquire an ephemeral authentication ticket (`protocols: ["hermes-gateway-v1", "hermes-gateway-ticket.<token>"]`) and local WebSocket endpoint (`ws://127.0.0.1:<port>/api/ws`).
+* **The Reconnect Ladder**:
+  If the bootstrap script fails (e.g. bad file permissions on `/opt/data`), `gatewayClient.ts` executes an exponential backoff reconnect ladder:
+  $$\text{delay} = \min(1000 \times 2^{(\text{attempt} - 1)}, 30000)\text{ ms}$$
+  `1s -> 2s -> 4s -> 8s -> 16s -> 30s` (capped at 30s).
+  This renders directly on the UI above the prompt as `"─ retrying in 30s (attempt X) "`.
+  Inspecting `/home/shawn/docker/hermes/data/logs/tui_gateway_crash.log` will reveal the exact lifecycle transitions.
+
+---
+
 ## 4. Step-by-Step Operational Runbook
 
 ### Step 1: Manage LiteLLM Proxy on Mac (Automated via LaunchAgent)
@@ -385,8 +480,23 @@ Run ad-hoc checks against both containers:
 
 ---
 
-### Step 4: Verify End-to-End LLM Connectivity
-Test sending a completion from inside the container through LiteLLM to Ollama:
+### Step 4: Verify Health & End-to-End Connectivity
+
+#### A. Verify Internal TUI Gateway Bootstrap & Data Permissions
+Ensure the internal gateway grants WebSocket tickets to the TUI without permission rejections:
+```bash
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/python /opt/hermes/ui-tui/scripts/gateway_bootstrap.py"
+```
+*Expected Output:* JSON payload containing `url: ws://127.0.0.1:<port>/api/ws` and `hermes-gateway-ticket`.
+
+#### B. Verify LiteLLM Model Catalog
+Query the models list exposed by LiteLLM on the Mac:
+```bash
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -H 'Authorization: Bearer sk-hermes-mac-secret' http://192.168.4.8:4000/v1/models"
+```
+
+#### C. Verify End-to-End Inference
+Send a completion from inside the container through LiteLLM to Ollama:
 ```bash
 .venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -X POST http://192.168.4.8:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
 ```
