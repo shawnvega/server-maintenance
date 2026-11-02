@@ -11,6 +11,11 @@
         href: https://192.168.4.66
         description: Remote Hardware Console (Arch ARM)
         ping: 192.168.4.66
+    - Cockpit:
+        icon: cockpit.png
+        href: https://192.168.4.19:9090
+        description: Fedora Web Admin Console (Workstation)
+        ping: 192.168.4.19
     - Caddy Proxy:
         icon: caddy.png
         href: http://192.168.4.5
@@ -36,6 +41,11 @@
         description: Experimental Ollama Gateway (Debian 13 VM)
 
 - Media & Storage:
+    - OpenMediaVault:
+        icon: openmediavault.png
+        href: http://192.168.4.4
+        description: Network-Attached Storage & Web Admin (Pi 4)
+        ping: 192.168.4.4
     - Immich:
         icon: immich.png
         href: https://immich.vvvega.com
@@ -77,7 +87,26 @@
           url: http://192.168.4.19:61208
           version: 4
           metric: cpu
+    - Glances Chromebook:
+        icon: glances.png
+        href: http://192.168.4.18:61208
+        description: Chromebook & Btrfs Metrics (Ubuntu)
+        widget:
+          type: glances
+          url: http://192.168.4.18:61208
+          version: 4
+          metric: cpu
+    - Glances Plant Monitor:
+        icon: glances.png
+        href: http://192.168.4.11:61208
+        description: E-Ink Display & System Metrics (Pi 2)
+        widget:
+          type: glances
+          url: http://192.168.4.11:61208
+          version: 4
+          metric: cpu
     - Frigate NVR:
         icon: frigate.png
-        href: http://192.168.4.19:5000
+        href: https://192.168.4.19:8971
         description: Camera Object Detection (Fedora)
+        ping: 192.168.4.19

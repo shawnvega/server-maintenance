@@ -9,13 +9,13 @@ headerStyle: clean
 layout:
   Core Infrastructure:
     style: row
-    columns: 3
+    columns: 4
   Automation & AI:
     style: row
     columns: 4
   Media & Storage:
     style: row
-    columns: 3
+    columns: 4
   Monitoring:
     style: row
-    columns: 4
+    columns: 3
