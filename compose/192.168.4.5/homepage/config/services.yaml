@@ -28,15 +28,15 @@
         description: Agent Web Desktop & Browser (Fedora)
         ping: 192.168.4.19
     - Hermes Gateway:
-        icon: robot.png
+        icon: hermes.png
         href: http://192.168.4.19:9119
         description: Agent Gateway API (Fedora)
     - OpenClaw Gateway (UTM):
-        icon: mac.png
+        icon: openclaw.png
         href: http://192.168.64.6:18789
         description: Local Ollama Gateway (Debian 13 VM)
     - OpenClaw Exp (UTM):
-        icon: mac.png
+        icon: openclaw.png
         href: http://192.168.64.9:18789
         description: Experimental Ollama Gateway (Debian 13 VM)
 
