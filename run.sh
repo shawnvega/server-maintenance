@@ -23,6 +23,7 @@ usage() {
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
   echo "  homepage             Deploy and update Homepage dashboard on Pi 5 (192.168.4.5)"
+  echo "  litellm              Deploy and update LiteLLM AI gateway on Pi 5 (192.168.4.5)"
   echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
   echo "  shutdown-php         Decommission and shut down WordPress & PHP workloads"
   echo "  check-host5          Inspect Host 5 (192.168.4.5) standalone upgrade & health status"
@@ -163,6 +164,9 @@ case "${CMD}" in
     ;;
   homepage)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_homepage.yml" "$@"
+    ;;
+  litellm)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_litellm.yml" "$@"
     ;;
   caddy|proxy)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/caddy.yml" "$@"

@@ -11,7 +11,12 @@
         href: https://192.168.4.66
         description: Remote Hardware Console (Arch ARM)
         ping: 192.168.4.66
-    - Cockpit:
+    - Cockpit (Pi 5):
+        icon: cockpit.png
+        href: https://192.168.4.5:9090
+        description: Pi 5 Web Admin Console (Debian)
+        ping: 192.168.4.5
+    - Cockpit (Fedora):
         icon: cockpit.png
         href: https://192.168.4.19:9090
         description: Fedora Web Admin Console (Workstation)
@@ -22,6 +27,12 @@
         description: Native Reverse Proxy & TLS (Pi 5)
 
 - Automation & AI:
+    - LiteLLM Proxy:
+        icon: litellm.png
+        href: http://192.168.4.5:4000
+        description: AI Gateway & Routing (Pi 5)
+        server: local-docker
+        container: litellm
     - Hermes Desktop:
         icon: hermes.png
         href: http://192.168.4.19:6080

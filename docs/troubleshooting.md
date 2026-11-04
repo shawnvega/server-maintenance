@@ -204,14 +204,14 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
    * Succeeded if it returns a JSON grant: `{"url": "ws://...", "protocols": [...]}`.
    * Failed if it returns `unsafe_control_permissions` or `unsafe_control_path`.
 
-2. **Verify LiteLLM Connectivity from Container to Mac**:
+2. **Verify LiteLLM Connectivity from Container to Pi 5**:
    ```bash
-   ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -H 'Authorization: Bearer sk-hermes-mac-secret' http://192.168.4.8:4000/v1/models"
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -H 'Authorization: Bearer sk-hermes-mac-secret' http://192.168.4.5:4000/v1/models"
    ```
 
 3. **Verify LLM Inference Completion**:
    ```bash
-   ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -X POST http://192.168.4.8:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway curl -s -X POST http://192.168.4.5:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
    ```
 
 4. **Verify & Configure Active Model in Hermes**:
@@ -223,7 +223,7 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
    # Configure custom local endpoint
    ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.default coding-26b"
    ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.provider custom"
-   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.8:4000/v1"
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.5:4000/v1"
    ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.api_key sk-hermes-mac-secret"
    ssh shawn@192.168.4.19 "docker restart hermes-gateway"
    ```
@@ -232,8 +232,8 @@ or logs show repeated backoffs in `/home/shawn/docker/hermes/data/logs/tui_gatew
    If Hermes displays `coding 26b │ ... / 256k` despite configuring Ollama with `num_ctx: 131072`:
    * Ollama reports both runtime `num_ctx: 131072` and architectural `context_length: 262144`.
    * LiteLLM defaults to advertising the architectural limit unless overridden.
-   * Add explicit `model_info` (`max_input_tokens: 131072`, `max_output_tokens: 8192`) in `files/litellm_mac_config.yaml`.
-   * Reload LiteLLM via `launchctl` and restart `hermes-gateway`.
+   * Add explicit `model_info` (`max_input_tokens: 131072`, `max_output_tokens: 8192`) in `compose/192.168.4.5/litellm/config/litellm_config.yaml`.
+   * Redeploy LiteLLM via `./run.sh litellm` and restart `hermes-gateway`.
 
 6. **`hermes: command not found` in Virtual Desktop LXTerminal**:
    * **Root Cause**: The web desktop (`http://192.168.4.19:6080`) runs inside `hermes-desktop`, an unprivileged sandbox for UI automation. The agent runtime and `hermes` CLI exist exclusively inside `hermes-gateway`.

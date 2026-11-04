@@ -277,10 +277,29 @@ The cluster utilizes local Apple Silicon Metal acceleration on the host Mac (`19
   ```
   Runs `scripts/setup_mlx_whisper.sh` to configure the `com.mlx.whisper` LaunchAgent on port 8080, route transcription requests through LiteLLM on port 4000, and execute a local self-test.
 * **Hermes Integration**:
-  Hermes Gateway delegates STT requests to `http://192.168.4.8:4000/v1` using bearer authentication, keeping CPU load off the dual-core Fedora node.
+  Hermes Gateway delegates STT requests to `http://192.168.4.5:4000/v1` using bearer authentication, keeping CPU load off the dual-core Fedora node.
 * **Verification**:
   Execute `./run.sh test-hermes` to verify the complete LLM and STT pipeline.
 * **Documentation**:
   Refer to [.agents/skills/mlx-whisper/SKILL.md](../.agents/skills/mlx-whisper/SKILL.md) for architecture, configuration schemas, and troubleshooting.
+
+---
+
+## 11. LiteLLM AI Gateway & Routing (Pi 5)
+
+The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.5:4000` acting as an authenticated 24/7 gateway and fallback router.
+
+* **Deployment & Updates**:
+  ```bash
+  ./run.sh litellm
+  ```
+  Deploys and recreates `compose/192.168.4.5/litellm` using `deploy_litellm.yml`.
+* **Routing**:
+  * Chat Completions (`coding-26b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`).
+  * Speech-to-Text (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
+  * Fallbacks: Configurable in `compose/192.168.4.5/litellm/config/litellm_config.yaml` to seamlessly redirect to cloud APIs (Gemini, Groq, OpenAI) when the Mac is offline.
+* **Mac Firewall Security**:
+  Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
+
 
 

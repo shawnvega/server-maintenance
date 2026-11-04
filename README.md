@@ -51,10 +51,13 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 # 9. Deploy and update Homepage dashboard (192.168.4.5)
 ./run.sh homepage
 
-# 10. Validate and reload Caddy reverse proxy (192.168.4.5)
+# 10. Deploy and update LiteLLM AI Gateway (192.168.4.5)
+./run.sh litellm
+
+# 11. Validate and reload Caddy reverse proxy (192.168.4.5)
 ./run.sh caddy
 
-# 11. Reclaim disk space across standard servers (journal vacuum, docker prune)
+# 12. Reclaim disk space across standard servers (journal vacuum, docker prune)
 ./run.sh cleanup -K
 ```
 

@@ -1,0 +1,9 @@
+---
+- name: Deploy LiteLLM Proxy to Raspberry Pi 5
+  hosts: 192.168.4.5
+  gather_facts: true
+  vars:
+    stack_item: "docker/litellm"
+  tasks:
+    - name: Deploy and restart LiteLLM stack
+      ansible.builtin.include_tasks: tasks/restart_docker_stack.yml

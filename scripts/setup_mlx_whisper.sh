@@ -18,7 +18,7 @@ LITELLM_CONFIG="${SCRIPT_DIR}/files/litellm_mac_config.yaml"
 PLIST_PATH="${HOME}/Library/LaunchAgents/com.mlx.whisper.plist"
 LOG_DIR="${HOME}/Library/Logs"
 PORT="${PORT:-8080}"
-HOST="${HOST:-127.0.0.1}"
+HOST="${HOST:-0.0.0.0}"
 MODEL="${MODEL:-mlx-community/whisper-large-v3-turbo}"
 PIPX_VENV="${HOME}/Library/Application Support/pipx/venvs/mlx-whisper"
 
@@ -125,14 +125,14 @@ launchctl load "${PLIST_PATH}"
 
 # Wait for service startup
 for i in {1..10}; do
-  if curl -s -m 1 "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
-    pass "MLX Whisper service is healthy on http://${HOST}:${PORT}"
+  if curl -s -m 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+    pass "MLX Whisper service is healthy on port ${PORT} (bound to ${HOST})"
     break
   fi
   sleep 1
 done
 
-if ! curl -s -m 1 "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
+if ! curl -s -m 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
   fail "Service did not respond within 10 seconds. Check logs at ${LOG_DIR}/mlx-whisper.error.log"
 fi
 

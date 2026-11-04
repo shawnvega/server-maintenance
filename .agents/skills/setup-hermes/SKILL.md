@@ -48,10 +48,10 @@ When encountering issues, locate your symptom below for the instant verified fix
   * **`hermes-gateway`** (Port **`9119`**): Core agent runtime, tool execution engine, session store, authenticated REST/WebSocket dashboard (`nousresearch/hermes-agent:latest`).
   * **`hermes-desktop`** (Port **`6080`**): Sandboxed virtual desktop (`hermes-desktop:minimal`) running `Xvfb` (display `:1`, 1280x800 24-bit TrueColor), `openbox`, `lxterminal`, `chromium` (`--no-sandbox`), and `noVNC` via `websockify`.
   * **Shared Workspace**: `/home/shawn/docker/hermes/data` mounted to `/opt/data` (gateway) and `/home/hermes/workspace` (desktop).
-* **LLM & Audio STT Provider (Host Mac at `192.168.4.8`)**:
-  * Engine: Local Ollama serving `gemma4:26b-mlx-code` + local MLX Whisper serving `whisper-large-v3-turbo` (`http://127.0.0.1:8080`).
-  * Proxy: LiteLLM proxy on `0.0.0.0:4000` with Bearer token authentication (`sk-hermes-mac-secret`), managed via macOS LaunchAgent (`~/Library/LaunchAgents/com.litellm.proxy.plist`).
-  * Configuration: `files/litellm_mac_config.yaml` declaring alias `coding-26b` for LLM and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
+* **LLM & Audio STT Provider**:
+  * Engine (Host Mac at `192.168.4.8`): Local Ollama serving `gemma4:26b-mlx-code` (`:11434`) + local MLX Whisper (`:8080`), protected by macOS PF firewall whitelist.
+  * Central Proxy (Pi 5 at `192.168.4.5:4000`): Dockerized LiteLLM proxy with Bearer token authentication (`sk-hermes-mac-secret`), managed via `compose/192.168.4.5/litellm` and `./run.sh litellm`.
+  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring alias `coding-26b` for LLM and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
 
 ### Core Invariants
 
@@ -65,29 +65,19 @@ When encountering issues, locate your symptom below for the instant verified fix
 
 ## 2. Operational Runbook
 
-### Step 1: Manage LiteLLM Proxy on Mac
+### Step 1: Manage LiteLLM Proxy on Pi 5
 
-LiteLLM runs as a persistent user LaunchAgent on macOS (`~/Library/LaunchAgents/com.litellm.proxy.plist`).
+LiteLLM runs as a Docker container on Raspberry Pi 5 (`192.168.4.5:4000`).
 
-#### A. Initial Provisioning from Scratch (macOS)
-If setting up or reinstalling LiteLLM on the Mac:
+#### Deploy or Restart LiteLLM
 ```bash
-# 1. Ensure Python 3.12 is installed (avoids Python 3.15 maturin build failures)
-brew install python@3.12 pipx
+./run.sh litellm
+```
 
-# 2. Install LiteLLM with proxy dependencies using Python 3.12
-pipx install --python /opt/homebrew/bin/python3.12 "litellm[proxy]"
-
-# 3. Create LaunchAgent plist
-cat << 'EOF' > ~/Library/LaunchAgents/com.litellm.proxy.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.litellm.proxy</string>
-    <key>ProgramArguments</key>
-    <array>
+Verify models from terminal:
+```bash
+curl -s -H "Authorization: Bearer sk-hermes-mac-secret" http://192.168.4.5:4000/v1/models
+```
         <string>/Users/shawn/.local/bin/litellm</string>
         <string>--config</string>
         <string>/Users/shawn/StudioProjects/server-maintenance/files/litellm_mac_config.yaml</string>
@@ -212,10 +202,10 @@ If debugging a specific component manually:
 #### C. LiteLLM Model Catalog & Inference Completion
 ```bash
 # Model catalog check
-.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -H 'Authorization: Bearer sk-hermes-mac-secret' http://192.168.4.8:4000/v1/models"
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -H 'Authorization: Bearer sk-hermes-mac-secret' http://192.168.4.5:4000/v1/models"
 
 # End-to-end inference test
-.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -X POST http://192.168.4.8:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway curl -s -X POST http://192.168.4.5:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-hermes-mac-secret' -d '{\"model\": \"coding-26b\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 100}'"
 ```
 
 #### D. Profile Management via `hermes` CLI
@@ -226,7 +216,7 @@ If debugging a specific component manually:
 # Update profile manually if needed
 .venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.default coding-26b"
 .venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.provider custom"
-.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.8:4000/v1"
+.venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.base_url http://192.168.4.5:4000/v1"
 .venv/bin/ansible 192.168.4.19 -m command -a "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.api_key sk-hermes-mac-secret"
 .venv/bin/ansible 192.168.4.19 -m command -a "docker restart hermes-gateway"
 ```

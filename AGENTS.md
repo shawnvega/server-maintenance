@@ -7,7 +7,7 @@ This repository manages automation and configuration for self-hosted home server
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119` + desktop `:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
@@ -88,6 +88,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 
 # Service Maintenance
 ./run.sh homepage                      # Deploy & update Homepage dashboard (.5)
+./run.sh litellm                       # Deploy & update LiteLLM AI Gateway (.5)
 ./run.sh caddy                           # Validate & reload native Caddy reverse proxy
 ./run.sh cleanup -K                      # Vacuum journals, clean package caches, prune docker
 ./run.sh restart-vlc                     # Restart persistent VLC RTSP stream (.18)

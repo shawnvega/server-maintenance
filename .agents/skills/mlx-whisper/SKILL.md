@@ -17,7 +17,7 @@ This skill guides the provisioning, lifecycle management, verification, and trou
 ```mermaid
 flowchart LR
     Browser["Hermes Web Composer / Mic"] -->|"Web Audio (JSON/Base64)"| Gateway["Hermes Gateway (.19:9119)"]
-    Gateway -->|"POST /v1/audio/transcriptions (Bearer auth)"| LiteLLM["LiteLLM Proxy (.8:4000)"]
+    Gateway -->|"POST /v1/audio/transcriptions (Bearer auth)"| LiteLLM["LiteLLM Proxy (.5:4000)"]
     LiteLLM -->|"Forward (model: whisper)"| MLX["MLX Whisper Server (.8:8080)"]
     MLX -->|"Metal / ANE GPU Inference"| Model[("whisper-large-v3-turbo")]
 ```
@@ -110,13 +110,13 @@ launchctl load ~/Library/LaunchAgents/com.mlx.whisper.plist
 
 ## 3. LiteLLM Proxy Route Configuration
 
-In [`files/litellm_mac_config.yaml`](file:///Users/shawn/StudioProjects/server-maintenance/files/litellm_mac_config.yaml):
+In [`compose/192.168.4.5/litellm/config/litellm_config.yaml`](file:///Users/shawn/StudioProjects/server-maintenance/compose/192.168.4.5/litellm/config/litellm_config.yaml):
 ```yaml
 model_list:
   - model_name: coding-26b
     litellm_params:
       model: ollama_chat/gemma4:26b-mlx-code
-      api_base: http://127.0.0.1:11434
+      api_base: http://192.168.4.8:11434
     model_info:
       max_input_tokens: 131072
       max_output_tokens: 8192
@@ -124,7 +124,7 @@ model_list:
   - model_name: whisper
     litellm_params:
       model: openai/whisper
-      api_base: http://127.0.0.1:8080/v1
+      api_base: http://192.168.4.8:8080/v1
       api_key: "none"
     model_info:
       mode: audio_transcription
@@ -132,7 +132,7 @@ model_list:
   - model_name: whisper-1
     litellm_params:
       model: openai/whisper
-      api_base: http://127.0.0.1:8080/v1
+      api_base: http://192.168.4.8:8080/v1
       api_key: "none"
     model_info:
       mode: audio_transcription
@@ -141,10 +141,9 @@ general_settings:
   master_key: "sk-hermes-mac-secret"
 ```
 
-Reload LiteLLM after updating:
+Deploy and restart LiteLLM on Pi 5:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.litellm.proxy.plist
-launchctl load ~/Library/LaunchAgents/com.litellm.proxy.plist
+./run.sh litellm
 ```
 
 ---
@@ -156,14 +155,14 @@ In [`compose/192.168.4.19/hermes/config.yaml.j2`](file:///Users/shawn/StudioProj
 model:
   default: {{ hermes_model_name | default('coding-26b') }}
   provider: custom
-  base_url: http://192.168.4.8:4000/v1
+  base_url: http://192.168.4.5:4000/v1
   api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
 
 stt:
   enabled: true
   provider: openai
   openai:
-    base_url: http://192.168.4.8:4000/v1
+    base_url: http://192.168.4.5:4000/v1
     api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
     model: whisper
 ```
@@ -172,7 +171,7 @@ To update or verify live in the running container:
 ```bash
 ssh shawn@192.168.4.19 "
 docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.provider openai
-docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.openai.base_url http://192.168.4.8:4000/v1
+docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.openai.base_url http://192.168.4.5:4000/v1
 docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.openai.api_key sk-hermes-mac-secret
 docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.openai.model whisper
 docker restart hermes-gateway

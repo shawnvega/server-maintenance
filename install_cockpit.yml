@@ -1,0 +1,27 @@
+---
+- name: Install and configure Cockpit on Raspberry Pi 5
+  hosts: 192.168.4.5
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Install Cockpit and companion management packages
+      ansible.builtin.apt:
+        name:
+          - cockpit
+          - cockpit-storaged
+          - cockpit-networkmanager
+        state: present
+        update_cache: true
+
+    - name: Ensure Cockpit socket is enabled and started
+      ansible.builtin.systemd:
+        name: cockpit.socket
+        state: started
+        enabled: true
+
+    - name: Verify Cockpit socket is listening on port 9090
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9090
+        timeout: 15

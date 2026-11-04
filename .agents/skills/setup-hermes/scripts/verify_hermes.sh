@@ -9,6 +9,7 @@ set -uo pipefail
 TARGET_HOST="${TARGET_HOST:-192.168.4.19}"
 SSH_USER="${SSH_USER:-shawn}"
 MAC_IP="${MAC_IP:-192.168.4.8}"
+LITELLM_IP="${LITELLM_IP:-192.168.4.5}"
 LITELLM_PORT="${LITELLM_PORT:-4000}"
 LITELLM_KEY="${LITELLM_KEY:-sk-hermes-mac-secret}"
 DEFAULT_MODEL="${DEFAULT_MODEL:-coding-26b}"
@@ -21,7 +22,8 @@ Usage: $0 [options]
 Options:
   --host <ip>          Target host running Hermes (default: 192.168.4.19)
   --user <user>        SSH user on target host (default: shawn)
-  --mac-ip <ip>        Host Mac running LiteLLM (default: 192.168.4.8)
+  --litellm-ip <ip>    Host running LiteLLM proxy (default: 192.168.4.5)
+  --mac-ip <ip>        Host Mac running inference backends (default: 192.168.4.8)
   --port <port>        LiteLLM proxy port (default: 4000)
   --key <key>          LiteLLM Bearer API key (default: sk-hermes-mac-secret)
   --model <model>      Default model name (default: coding-26b)
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) TARGET_HOST="$2"; shift 2 ;;
     --user) SSH_USER="$2"; shift 2 ;;
+    --litellm-ip) LITELLM_IP="$2"; shift 2 ;;
     --mac-ip) MAC_IP="$2"; shift 2 ;;
     --port) LITELLM_PORT="$2"; shift 2 ;;
     --key) LITELLM_KEY="$2"; shift 2 ;;
@@ -83,24 +86,20 @@ info() {
 echo "========================================================"
 echo " Hermes Desktop & Gateway Stack Verification Suite"
 echo " Target Host: ${TARGET_HOST} (User: ${SSH_USER})"
-echo " LiteLLM Mac: ${MAC_IP}:${LITELLM_PORT}"
+echo " LiteLLM Proxy: ${LITELLM_IP}:${LITELLM_PORT}"
+echo " Inference Mac: ${MAC_IP}"
 echo "========================================================"
 echo ""
 
-# 1. Local LiteLLM Proxy Status (if run from Mac host)
-info "1. Checking LiteLLM Proxy on Host Mac..."
+# 1. LiteLLM Proxy Status
+info "1. Checking LiteLLM Proxy Status..."
 if command -v curl >/dev/null 2>&1; then
-  LOCAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 3 -H "Authorization: Bearer ${LITELLM_KEY}" "http://127.0.0.1:${LITELLM_PORT}/v1/models" 2>/dev/null || echo "000")
-  if [[ "${LOCAL_CODE}" == "200" ]]; then
-    pass "LiteLLM is listening locally on 127.0.0.1:${LITELLM_PORT} (HTTP 200)"
+  PROXY_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 3 -H "Authorization: Bearer ${LITELLM_KEY}" "http://${LITELLM_IP}:${LITELLM_PORT}/v1/models" 2>/dev/null || echo "000")
+  if [[ "${PROXY_CODE}" == "200" ]]; then
+    pass "LiteLLM is reachable at ${LITELLM_IP}:${LITELLM_PORT} (HTTP 200)"
   else
-    LAN_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 3 -H "Authorization: Bearer ${LITELLM_KEY}" "http://${MAC_IP}:${LITELLM_PORT}/v1/models" 2>/dev/null || echo "000")
-    if [[ "${LAN_CODE}" == "200" ]]; then
-      pass "LiteLLM is reachable over LAN at ${MAC_IP}:${LITELLM_PORT} (HTTP 200)"
-    else
-      warn "LiteLLM not reachable directly on local test (HTTP local=${LOCAL_CODE}, lan=${LAN_CODE})" \
-           "If running inside a VM or non-Mac node, verify LiteLLM on the Mac: launchctl print gui/\$(id -u)/com.litellm.proxy"
-    fi
+    warn "LiteLLM not reachable at http://${LITELLM_IP}:${LITELLM_PORT}/v1/models (HTTP ${PROXY_CODE})" \
+         "Verify LiteLLM stack on ${LITELLM_IP}: ./run.sh litellm"
   fi
 fi
 
@@ -218,19 +217,19 @@ else
 fi
 
 # 8. Cross-Host Container to LiteLLM Connectivity
-info "8. Checking Container-to-Mac LiteLLM Reachability (${MAC_IP}:${LITELLM_PORT})..."
+info "8. Checking Container-to-Proxy LiteLLM Reachability (${LITELLM_IP}:${LITELLM_PORT})..."
 CONTAINER_LITELLM_CODE=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
-  docker exec hermes-gateway curl -s -o /dev/null -w '%{http_code}' -m 5 -H 'Authorization: Bearer ${LITELLM_KEY}' 'http://${MAC_IP}:${LITELLM_PORT}/v1/models' 2>/dev/null || echo '000'
+  docker exec hermes-gateway curl -s -o /dev/null -w '%{http_code}' -m 5 -H 'Authorization: Bearer ${LITELLM_KEY}' 'http://${LITELLM_IP}:${LITELLM_PORT}/v1/models' 2>/dev/null || echo '000'
 " 2>/dev/null)
 
 if [[ "${CONTAINER_LITELLM_CODE}" == "200" ]]; then
-  pass "hermes-gateway reached LiteLLM proxy at http://${MAC_IP}:${LITELLM_PORT}/v1/models (HTTP 200)"
+  pass "hermes-gateway reached LiteLLM proxy at http://${LITELLM_IP}:${LITELLM_PORT}/v1/models (HTTP 200)"
 elif [[ "${CONTAINER_LITELLM_CODE}" == "401" || "${CONTAINER_LITELLM_CODE}" == "403" ]]; then
   fail "LiteLLM authentication failed (HTTP ${CONTAINER_LITELLM_CODE})" \
-       "Verify Bearer token in files/litellm_mac_config.yaml matches LITELLM_KEY ('${LITELLM_KEY}')"
+       "Verify Bearer token matches LITELLM_KEY ('${LITELLM_KEY}')"
 else
   fail "hermes-gateway cannot reach LiteLLM proxy (HTTP ${CONTAINER_LITELLM_CODE})" \
-       "Check Mac firewall (PF), host IP binding (0.0.0.0:4000), or LAN routing"
+       "Check Pi 5 LiteLLM container status, firewall, or LAN routing: ./run.sh litellm"
 fi
 
 # 9. Active Profile Model Configuration
@@ -253,7 +252,7 @@ fi
 if [[ "${QUICK_MODE}" == false ]]; then
   info "10. Testing End-to-End Inference Completion (ping test)..."
   LLM_RESPONSE=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
-    docker exec hermes-gateway curl -s -m 20 -X POST 'http://${MAC_IP}:${LITELLM_PORT}/v1/chat/completions' \
+    docker exec hermes-gateway curl -s -m 20 -X POST 'http://${LITELLM_IP}:${LITELLM_PORT}/v1/chat/completions' \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer ${LITELLM_KEY}' \
       -d '{\"model\": \"${DEFAULT_MODEL}\", \"messages\": [{\"role\": \"user\", \"content\": \"Respond with PONG only\"}], \"max_tokens\": 30}' 2>/dev/null || echo 'ERROR'
@@ -283,13 +282,13 @@ else
 fi
 
 CONTAINER_WHISPER_CHECK=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
-  docker exec hermes-gateway curl -s -m 5 -H 'Authorization: Bearer ${LITELLM_KEY}' 'http://${MAC_IP}:${LITELLM_PORT}/v1/models' 2>/dev/null | grep -o '\"id\":\"whisper\"' || true
+  docker exec hermes-gateway curl -s -m 5 -H 'Authorization: Bearer ${LITELLM_KEY}' 'http://${LITELLM_IP}:${LITELLM_PORT}/v1/models' 2>/dev/null | grep -o '\"id\":\"whisper\"' || true
 " 2>/dev/null)
 if [[ -n "${CONTAINER_WHISPER_CHECK}" ]]; then
   pass "LiteLLM exposes 'whisper' audio_transcription model to hermes-gateway"
 else
   warn "LiteLLM reachable but 'whisper' model missing from catalog" \
-       "Ensure files/litellm_mac_config.yaml has whisper declared and reload LiteLLM"
+       "Ensure compose/192.168.4.5/litellm/config/litellm_config.yaml has whisper declared"
 fi
 
 HERMES_STT_PROVIDER=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
