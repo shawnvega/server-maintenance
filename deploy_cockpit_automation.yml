@@ -1,0 +1,98 @@
+---
+- name: Deploy Cockpit Ansible Automation Services and Timers to Raspberry Pi 5
+  hosts: 192.168.4.5
+  become: true
+  gather_facts: true
+
+  vars:
+    ansible_workspace: "/home/shawn/server-maintenance"
+    ansible_user_name: "shawn"
+
+    ansible_tasks:
+      - name: ansible-backup-data
+        description: "Ansible Homelab Data & Immich Backup (Host 4 -> Host 5)"
+        command: "/home/shawn/server-maintenance/run.sh backup-data"
+        schedule: "*-*-* 02:00:00"
+        has_timer: true
+
+      - name: ansible-check-btrfs
+        description: "Ansible Daily Btrfs Storage Health & Error Audit"
+        command: "/home/shawn/server-maintenance/run.sh check-btrfs"
+        schedule: "*-*-* 06:00:00"
+        has_timer: true
+
+      - name: ansible-cleanup
+        description: "Ansible Weekly Cluster Disk Cleanup & Docker Prune"
+        command: "/home/shawn/server-maintenance/run.sh cleanup"
+        schedule: "Sun *-*-* 04:00:00"
+        has_timer: true
+
+      - name: ansible-backup-rpi
+        description: "Ansible Weekly Pi SD Card Mirror Backup (rpi-clone)"
+        command: "/home/shawn/server-maintenance/run.sh backup"
+        schedule: "Sun *-*-* 03:00:00"
+        has_timer: true
+
+      - name: ansible-scrub-btrfs
+        description: "Ansible Monthly Btrfs Storage Pool Scrub"
+        command: "/home/shawn/server-maintenance/run.sh scrub-btrfs --all"
+        schedule: "Sat *-*-1..7 01:00:00"
+        has_timer: true
+
+      - name: ansible-upgrade-all
+        description: "Ansible Master Cluster Upgrade"
+        command: "/home/shawn/server-maintenance/run.sh upgrade-all"
+        schedule: "Mon *-*-* 01:00:00"
+        has_timer: true
+
+  tasks:
+    - name: Ensure required system packages are present
+      ansible.builtin.apt:
+        name:
+          - git
+          - python3-venv
+          - python3-pip
+          - rsync
+        state: present
+        update_cache: false
+
+    - name: Deploy systemd service units for Ansible tasks
+      ansible.builtin.template:
+        src: templates/systemd/ansible-job.service.j2
+        dest: "/etc/systemd/system/{{ item.name }}.service"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ ansible_tasks }}"
+
+    - name: Deploy systemd timer units for scheduled Ansible tasks
+      ansible.builtin.template:
+        src: templates/systemd/ansible-job.timer.j2
+        dest: "/etc/systemd/system/{{ item.name }}.timer"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ ansible_tasks }}"
+      when: item.has_timer | bool
+
+    - name: Reload systemd configuration
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and start systemd timers
+      ansible.builtin.systemd:
+        name: "{{ item.name }}.timer"
+        state: started
+        enabled: true
+      loop: "{{ ansible_tasks }}"
+      when: item.has_timer | bool
+
+    - name: List registered Ansible timers
+      ansible.builtin.command:
+        cmd: "systemctl list-timers 'ansible-*' --no-pager"
+      register: timers_output
+      changed_when: false
+
+    - name: Display active Ansible timers in Cockpit
+      ansible.builtin.debug:
+        var: timers_output.stdout_lines

@@ -1,0 +1,15 @@
+[Unit]
+Description={{ item.description }}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=shawn
+Group=shawn
+WorkingDirectory=/home/shawn/server-maintenance
+# Pull latest changes from git before execution (continue even if offline or fetch fails)
+ExecStartPre=-/usr/bin/git -C /home/shawn/server-maintenance pull --ff-only
+ExecStart={{ item.command }}
+StandardOutput=journal
+StandardError=journal

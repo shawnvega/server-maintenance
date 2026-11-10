@@ -9,7 +9,7 @@ Ansible automation for managing home servers natively (load monitoring, `rpi-clo
 | Host | User | OS | Backup Method | Containers / Workloads | Mode |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `semaphore` (`:3000`, LAN only), native Caddy | Read/Write |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers | Read/Write |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | `glances`, persistent VLC RTSP stream (`snap` vlc) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` | Read/Write |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink`, `glances` (`:61208`) | **Read-Only (OverlayFS & Boot Protection)** |
@@ -103,8 +103,10 @@ Detailed architecture, lifecycle procedures, and troubleshooting guides are orga
 * 🔄 **[Upgrade Pipelines & Lifecycles](docs/pipelines.md)**: Staged execution flows, safety gates (scrub check, load check, reboot evaluation), and tag-based selective execution.
 * 💾 **[Btrfs Storage Architecture & Scrubs](docs/storage-btrfs.md)**: Health checks, pool scrubs, scrub safety gates, `/var` RAID 1 migration, and live drive replacement.
 * 🔒 **[Read-Only Appliances](docs/appliances.md)**: Maintenance lifecycles, remount mechanics, and verification for OverlayFS Pi (`.11`) and Arch Linux PiKVM (`.66`).
+* 🤖 **[Hermes Agent Stack](docs/hermes.md)**: Architecture, LiteLLM/Ollama integration, LXTerminal sandboxing, STT/Whisper, and permissions invariants.
+* 📊 **[Homepage Dashboard](docs/homepage.md)**: Dashboard layout, Caddy reverse proxy routing, Glances widgets, and Docker socket permissions.
 * ⚙️ **[Specialized Workflows & Services](docs/workflows.md)**: Caddy reverse proxy deployment, Semaphore runner safety, data share/Immich sync, password rotation, Docker secrets, and Ansible Vault rekeying.
-* 🛠️ **[Troubleshooting Runbooks](docs/troubleshooting.md)**: Recovery steps for high load halts, `rpi-clone` backup failures, drive degradation, read-only lock failures, VLC stream freezes, and Hermes reconnect loops.
+* 🛠️ **[Incident Triage & Recovery](docs/troubleshooting.md)**: Rapid triage matrix and instant CLI recovery commands across all hosts and workloads.
 
 ---
 
@@ -125,8 +127,10 @@ Detailed architecture, lifecycle procedures, and troubleshooting guides are orga
 │   ├── pipelines.md           # Master, standard, ro, pikvm, and mac upgrade lifecycles
 │   ├── storage-btrfs.md       # Btrfs health, scrubs, and Chromebook RAID 1 management
 │   ├── appliances.md          # Read-Only mechanics for OverlayFS Pi & PiKVM
+│   ├── hermes.md              # Hermes AI agent, desktop sandbox, and LiteLLM integration
+│   ├── homepage.md            # Homepage dashboard widgets, Caddy ingress, and host header rules
 │   ├── workflows.md           # Caddy, Semaphore runner safety, Vault, and password updates
-│   └── troubleshooting.md     # Failure mitigation runbooks and emergency recovery
+│   └── troubleshooting.md     # Rapid incident triage matrix and emergency runbooks
 │
 ├── compose/                   # Docker compose stacks by host (e.g. 192.168.4.19/hermes)
 ├── files/                     # Static configs (Caddyfile, upgrade_host5.sh, litellm config)

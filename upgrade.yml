@@ -5,13 +5,6 @@
 
   tasks:
     # -------------------------------------------------------------
-    # Stage 0: Semaphore Self-Upgrade Safety Check
-    # -------------------------------------------------------------
-    - name: Verify Semaphore runner safety on 192.168.4.5
-      tags: [always]
-      ansible.builtin.include_tasks: tasks/check_semaphore_safety.yml
-
-    # -------------------------------------------------------------
     # Stage 0.5: Btrfs Scrub Pre-flight Safety Check
     # -------------------------------------------------------------
     - name: Check for active Btrfs scrub operations

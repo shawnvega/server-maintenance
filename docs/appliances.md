@@ -94,3 +94,20 @@ ssh root@192.168.4.66 '/usr/bin/ro'
 # Or reboot (kernel cmdline guarantees read-only boot)
 ssh root@192.168.4.66 'reboot'
 ```
+
+### KVMD Service Integrity Recovery (`kvmd -m`)
+> [!CAUTION]
+> Do NOT reboot PiKVM if `kvmd -m` integrity verification fails, as it may render remote KVM access inaccessible.
+
+If `kvmd -m` reports errors:
+```bash
+# Inspect validation errors
+ssh root@192.168.4.66 'kvmd -m'
+
+# Check service logs
+ssh root@192.168.4.66 'journalctl -u kvmd -n 50 --no-pager'
+
+# Re-run update to resolve interrupted package upgrades
+ssh root@192.168.4.66 '/usr/bin/pikvm-update --no-reboot'
+```
+

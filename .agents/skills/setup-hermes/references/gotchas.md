@@ -26,6 +26,7 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | Fresh deploy resets model to `opus 4.6` unless manually configured | Profile `config.yaml` is missing on fresh deployments | [16. Profile Pre-Seeding via `config.yaml.j2`](#16-automatic-profile-pre-seeding-via-configyaml) |
 | Hermes shows 256k context window (`.../256k`) instead of 128k | Base architecture metadata reports 256k; LiteLLM lacks `model_info` | [17. Context Window Mismatch (128k vs 256k)](#17-context-window-mismatch-128k-vs-256k-between-ollama-litellm-and-hermes) |
 | Voice dictation / mic fails or is disabled in dashboard | Insecure HTTP origin (`getUserMedia`) or missing STT backend | [18. Voice Dictation & MLX Whisper Setup](#18-voice-dictation-speech-to-text-and-mlx-whisper-integration) |
+| Web UI model switcher only shows `coding-26b` | Bare `custom` provider probes `/models` without auth (HTTP 401) | [19. Web UI Model Switcher Only Displays Default Model](#19-web-ui-model-switcher-only-displays-default-model-coding-26b) |
 
 ---
 
@@ -433,3 +434,37 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
      ```
   4. **Verify**:
      Run `./run.sh test-hermes` to validate check #11 (MLX Whisper daemon, LiteLLM catalog, and Hermes STT configuration).
+
+---
+
+### 19. Web UI Model Switcher Only Displays Default Model (`coding-26b`)
+* **The Symptom**:
+  Opening the Hermes Web UI (`http://192.168.4.19:9119`) and clicking the model switcher only displays `coding-26b`, even though LiteLLM on `192.168.4.5:4000` has `coding-12b`, `coding-26b`, and `coding-31b` configured.
+* **Root Cause**:
+  Configuring `model.provider: custom` invokes Hermes's bare custom provider discovery (`_lap_bare_custom_row()` in `hermes_cli/model_switch_providers.py`), which probes `<base_url>/models` with an empty API key (`""`). Because LiteLLM requires Bearer token authentication (`sk-hermes-mac-secret`), the unauthenticated probe fails with HTTP 401 Unauthorized, and Hermes silently falls back to listing only `model.default`.
+* **The Fix**:
+  Configure LiteLLM as an authenticated provider under `providers:` in `/opt/data/config.yaml` and set `model.provider: litellm`:
+  ```yaml
+  model:
+    default: coding-26b
+    provider: litellm
+    base_url: http://192.168.4.5:4000/v1
+    api_key: sk-hermes-mac-secret
+
+  providers:
+    litellm:
+      name: LiteLLM
+      base_url: http://192.168.4.5:4000/v1
+      api_key: sk-hermes-mac-secret
+      models:
+        - coding-12b
+        - coding-26b
+        - coding-31b
+      discover_models: false
+  ```
+  Setting `discover_models: false` and declaring explicit `models:` pins the Web UI dropdown to the three coding models, preventing authentication failures and filtering out internal transcription or raw model tags.
+  Then restart `hermes-gateway`:
+  ```bash
+  ssh shawn@192.168.4.19 "docker restart hermes-gateway"
+  ```
+

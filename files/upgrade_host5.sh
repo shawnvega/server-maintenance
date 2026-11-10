@@ -8,7 +8,7 @@
 #   3. rpi-clone SD backup (/dev/mmcblk0)
 #   4. Systemd journal vacuum & cap
 #   5. APT package updates (Debian/Pi OS)
-#   6. Docker stacks pull, recreate, & prune (glances, immich-ml, semaphore)
+#   6. Docker stacks pull, recreate, & prune (glances, immich-ml, homepage, litellm)
 #   7. Caddy reverse proxy validation & reload
 #   8. Structured status record (/home/shawn/logs/upgrade_host5.status)
 # =============================================================================
@@ -37,7 +37,7 @@ LOG_FILE="${LOG_DIR}/upgrade_host5.log"
 STATUS_FILE="${LOG_DIR}/upgrade_host5.status"
 BACKUP_DEVICE="/dev/mmcblk0"
 LOAD_THRESHOLD=6.0
-DOCKER_STACKS=("docker/glances" "docker/immich-ml" "docker/semaphore" "docker/homepage")
+DOCKER_STACKS=("docker/glances" "docker/immich-ml" "docker/homepage" "docker/litellm")
 
 # Ensure logs directory exists
 mkdir -p "${LOG_DIR}"
@@ -313,7 +313,7 @@ Status:         SUCCESS
 Duration:       ${DURATION_FMT}
 Backup:         ${backup_status}
 OS Packages:    ${upgradable_count} packages upgraded
-Docker Stacks:  glances, immich-ml, semaphore updated
+Docker Stacks:  glances, immich-ml, homepage, litellm updated
 Caddy:          ${caddy_status}
 Reboot Needed:  ${reboot_summary}
 Log File:       ${LOG_FILE}

@@ -1,12 +1,38 @@
 model_list:
   # Primary LLM routes on Apple Silicon Mac (Metal GPU)
+  # --- 12B Coding Model ---
+  - model_name: ollama/gemma4:12b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:12b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: gemma4:12b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:12b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: coding-12b
+    litellm_params:
+      model: ollama_chat/gemma4:12b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  # --- 26B Coding Model (Default) ---
   - model_name: ollama/gemma4:26b-mlx-code
     litellm_params:
       model: ollama_chat/gemma4:26b-mlx-code
       api_base: http://192.168.4.8:11434
     model_info:
       max_input_tokens: 131072
-      max_output_tokens: 8192
+      max_output_tokens: 16384
 
   - model_name: gemma4:26b-mlx-code
     litellm_params:
@@ -14,7 +40,7 @@ model_list:
       api_base: http://192.168.4.8:11434
     model_info:
       max_input_tokens: 131072
-      max_output_tokens: 8192
+      max_output_tokens: 16384
 
   - model_name: coding-26b
     litellm_params:
@@ -22,7 +48,32 @@ model_list:
       api_base: http://192.168.4.8:11434
     model_info:
       max_input_tokens: 131072
-      max_output_tokens: 8192
+      max_output_tokens: 16384
+
+  # --- 31B Coding Model ---
+  - model_name: ollama/gemma4:31b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:31b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: gemma4:31b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:31b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: coding-31b
+    litellm_params:
+      model: ollama_chat/gemma4:31b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
 
   # Primary STT routes (Local MLX Whisper on Apple Silicon Mac)
   - model_name: whisper

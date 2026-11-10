@@ -116,14 +116,6 @@
       changed_when: false
 
     # =============================================================
-    # Stage STD-0: Semaphore Self-Upgrade Safety Check
-    # =============================================================
-    - name: "[Standard] Verify Semaphore runner safety on 192.168.4.5"
-      tags: [always]
-      when: inventory_hostname in groups.get('standard_servers', [])
-      ansible.builtin.include_tasks: tasks/check_semaphore_safety.yml
-
-    # =============================================================
     # Stage STD-0.5: Btrfs Scrub Pre-flight Safety Check
     # =============================================================
     - name: "[Standard] Check for active Btrfs scrub operations"

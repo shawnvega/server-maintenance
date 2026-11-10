@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     RESOLUTION=1280x800 \
     HOME=/home/hermes
 
-# 1. Install base utilities, X11 virtual desktop, Openbox, noVNC, lxterminal, obconf, and Python (glibc)
+# 1. Install base utilities, X11 virtual desktop, Openbox, noVNC, lxterminal, obconf, Python (glibc), git, and GitHub CLI (gh)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
@@ -26,8 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     git \
+    openssh-client \
     procps \
     net-tools \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -38,8 +43,12 @@ RUN mkdir -p /etc/chromium.d \
 # 3. Symlink noVNC index so the root URL opens the web viewer directly
 RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
-# 4. Create non-root hermes user
-RUN useradd -m -s /bin/bash -u 1000 hermes
+# 4. Create non-root hermes user and workspace compatibility symlinks
+RUN useradd -m -s /bin/bash -u 1000 hermes \
+    && ln -sfn /home/hermes/workspace /opt/data \
+    && mkdir -p /home/hermes/.config \
+    && ln -sfn /home/hermes/workspace/.config/gh /home/hermes/.config/gh \
+    && ln -sfn /home/hermes/workspace/.ssh /home/hermes/.ssh
 
 # 5. Set up Hermes virtual environment and tools
 USER hermes

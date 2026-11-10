@@ -143,3 +143,51 @@ Ansible tags allow targeted execution of specific pipeline stages without runnin
 # Target a single server
 ./run.sh upgrade --limit 192.168.4.4 -K
 ```
+
+---
+
+## Pipeline Troubleshooting & Overrides
+
+### 1. High System Load Halts Upgrade Pipeline
+* **Symptoms**: Stage 1 (`load_check`) in `upgrade.yml` or `upgrade_all.yml` times out waiting for load average to drop below threshold (`load_threshold`).
+* **Investigation**: Inspect top CPU-consuming processes on the blocked node:
+  ```bash
+  ./run.sh raw 'ps aux --sort=-%cpu | head -n 10'
+  ```
+  * On `192.168.4.19`: Check Frigate camera ingestion or Hermes model inference.
+  * On `192.168.4.4` / `.5`: Check Immich machine learning transcode or indexing jobs.
+* **Mitigation & Overrides**: If high load is expected batch background processing:
+  ```bash
+  # Override load threshold for this run
+  ./run.sh upgrade -K -e "load_threshold=8.0"
+
+  # Or skip load check entirely
+  ./run.sh upgrade -K --skip-tags load_check
+  ```
+
+### 2. `rpi-clone` Backup Failures
+* **Symptoms**: Stage 2 (`backup`) halts with an error executing `rpi-clone`.
+* **Investigation**: Check whether target block device disconnected or shifted names:
+  ```bash
+  ./run.sh raw 'lsblk'
+  ssh shawn@192.168.4.4 'sudo dmesg -T | grep -E "(mmc|sd|error)" | tail -n 20'
+  ```
+* **Mitigation**:
+  1. Compare device name with `backup_device` in `inventory.ini` and update if shifted (e.g. `/dev/sda` -> `/dev/sdb`).
+  2. If destination SD/USB card corrupted, format or replace the media.
+  3. To proceed with package updates without backing up:
+     ```bash
+     ./run.sh upgrade -K --skip-tags backup
+     ```
+
+### 3. VLC RTSP Video Stream Recovery (`192.168.4.18`)
+* **Symptoms**: Fullscreen camera monitor stream on Chromebook display is frozen or closed.
+* **Investigation & Restart**:
+  ```bash
+  # Restart stream via dedicated runner shortcut
+  ./run.sh restart-vlc
+
+  # If display errors occur, ensure X11 display session :0 is active
+  ssh shawn@192.168.4.18 'DISPLAY=:0 xrandr'
+  ```
+

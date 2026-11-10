@@ -118,4 +118,8 @@ If a drive in the 3-device RAID 1 pool reports errors or fails:
    ```bash
    ssh shawn@192.168.4.18 'sudo btrfs replace status /var'
    ```
-5. Once complete, update `/etc/fstab` if device UUIDs or mount paths changed.
+5. **Reset device error counters**:
+   ```bash
+   ssh shawn@192.168.4.18 'sudo btrfs device stats -z /var'
+   ```
+6. Once complete, update `/etc/fstab` if device UUIDs or mount paths changed.

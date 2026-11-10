@@ -34,7 +34,7 @@
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/docker-compose.yaml"
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yml"
     - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/compose.yaml"
-    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/Dockerfile"
+    - "compose/{{ inventory_hostname }}/{{ stack_item | basename }}/Dockerfile*"
 
 - name: "Check if config directory exists for {{ stack_item }}"
   tags: [docker]
@@ -60,6 +60,55 @@
     mode: '0755'
   when: (stack_item | basename) == 'hermes'
 
+- name: "Ensure .local/bin directory exists for hermes"
+  tags: [docker]
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.local/bin"
+    state: directory
+    mode: '0755'
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Check if gh CLI is installed in hermes workspace"
+  tags: [docker]
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.local/bin/gh"
+  register: hermes_gh_stat
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Install gh CLI into hermes workspace"
+  tags: [docker]
+  ansible.builtin.unarchive:
+    src: "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz"
+    dest: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.local/bin"
+    remote_src: true
+    extra_opts:
+      - "--strip-components=2"
+      - "gh_2.103.3_linux_amd64/bin/gh"
+    mode: '0755'
+  when:
+    - (stack_item | basename) == 'hermes'
+    - not (hermes_gh_stat.stat.exists | default(false))
+
+- name: "Ensure gh config directory exists for hermes"
+  tags: [docker]
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.config/gh"
+    state: directory
+    mode: '0755'
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Ensure baseline gh config exists for hermes"
+  tags: [docker]
+  ansible.builtin.copy:
+    content: |
+      version: 1
+      git_protocol: ssh
+      prompt: disabled
+    dest: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.config/gh/config.yml"
+    mode: '0644'
+    force: false
+  when: (stack_item | basename) == 'hermes'
+
 - name: "Ensure baseline config.yaml exists for hermes workspace"
   tags: [docker]
   ansible.builtin.template:
@@ -80,37 +129,18 @@
 
 - name: "Check if Dockerfile exists for {{ stack_item }}"
   tags: [docker]
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}/Dockerfile"
+  ansible.builtin.find:
+    paths: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}"
+    patterns: "Dockerfile*"
   register: stack_dockerfile_stat
 
 - name: "Recreate and restart {{ stack_item }} (~2s downtime)"
   tags: [docker]
   ansible.builtin.command:
-    cmd: "docker compose up -d --remove-orphans {{ '--build' if stack_dockerfile_stat.stat.exists else '' }}"
+    cmd: "docker compose up -d --remove-orphans {{ '--build' if (stack_dockerfile_stat.matched | default(0)) > 0 else '' }}"
     chdir: "{{ ansible_facts['user_dir'] }}/{{ stack_item }}"
   register: docker_up_out
   changed_when: "'Started' in docker_up_out.stdout or 'Recreated' in docker_up_out.stdout or 'Building' in docker_up_out.stdout"
   failed_when: docker_up_out.rc != 0
 
-- name: "Sync Semaphore admin password from vault"
-  tags: [docker]
-  when:
-    - (stack_item | basename) == 'semaphore'
-    - semaphore_admin_password is defined
-  ansible.builtin.shell:
-    cmd: >
-      docker exec semaphore semaphore users change-by-login
-      --login admin
-      --password "{{ semaphore_admin_password }}"
-      --config /etc/semaphore/config.json
-      ||
-      docker exec semaphore semaphore users add
-      --admin
-      --login admin
-      --name Admin
-      --email admin@localhost
-      --password "{{ semaphore_admin_password }}"
-      --config /etc/semaphore/config.json
-  no_log: true
-  changed_when: true
+

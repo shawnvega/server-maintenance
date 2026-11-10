@@ -105,6 +105,7 @@
             done
             rm -rf /var/lib/snapd/cache/*
           fi
+        executable: /bin/bash
       changed_when: false
 
     # -------------------------------------------------------------

@@ -32,38 +32,38 @@ Host `192.168.4.5` runs Caddy natively as a systemd service (`caddy.service`), p
 
 ---
 
-## 2. Host 5 Standalone Maintenance & Semaphore Runner Safety
+## 2. Cockpit Systemd Automation & Host 5 Maintenance (`192.168.4.5`)
 
-### Access Endpoints & Credentials
-* **Local LAN URL**: `http://192.168.4.5:3000` (LAN only; external ingress disabled)
-* **Initial Admin Credentials**: Username `admin` / Password `changeme` (configured in `compose/192.168.4.5/semaphore/docker-compose.yml`)
+Host `192.168.4.5` runs automated Ansible maintenance schedules natively via systemd services and timers, fully observable and manageable via the **Cockpit Web Console** (`https://192.168.4.5:9090`).
 
-### The Semaphore Runner Conflict
-Semaphore UI executes automation playbooks inside a container hosted on `192.168.4.5`. If Ansible upgrades `192.168.4.5` directly through Semaphore:
-* Restarting Docker or upgrading network/system components terminates the active Semaphore runner container, crashing the playbook run mid-execution.
+### Cockpit Web Dashboard Integration
+* **Services View** (`System > Services`): Lists all `ansible-*.service` units with real-time status (green `active`/`success` vs red `failed`), and provides a **"Start"** button to execute tasks on demand without opening SSH.
+* **Timers View** (`Services > Timers`): Displays upcoming scheduled execution times, interval countdowns, and last-run timestamps.
+* **Logs View** (`Logs` or service unit page): Shows full timestamped, colorized Ansible journal logs with play recaps.
 
-### The Safety Solution
-1. **Runner Detection (`tasks/check_semaphore_safety.yml`)**:
-   * Master and standard upgrade playbooks (`upgrade_all.yml`, `upgrade.yml`) detect if they are running inside Semaphore.
-   * If detected, execution for `192.168.4.5` is cleanly ended (`meta: end_host`), while displaying the status and timestamp of Host 5's last independent maintenance run.
-2. **Standalone Maintenance Script (`files/upgrade_host5.sh`)**:
-   * A native bash script deployed to `/home/shawn/scripts/upgrade_host5.sh`.
-   * Enables Docker `live-restore` to keep containers running during Docker engine updates.
-   * Records execution logs and structured status to `/home/shawn/logs/upgrade_host5.status`.
-3. **Detached Execution (`trigger_host5_upgrade.yml`)**:
-   * Launches `upgrade_host5.sh` using `systemd-run` as a transient, detached background unit.
-   * Safe to trigger from Semaphore or CLI because the job outlives the runner session.
+### Registered Schedules & Units
+| Service / Timer Unit | Action / Playbook | Default Schedule | Description |
+|---|---|---|---|
+| `ansible-backup-data.timer` | `./run.sh backup-data` | Daily `02:00` | Syncs Immich database, photos, and shares from Host 4 to Host 5. |
+| `ansible-check-btrfs.timer` | `./run.sh check-btrfs` | Daily `06:00` | Audits Btrfs pools across `.4`, `.5`, `.18`, `.19` for errors. |
+| `ansible-backup-rpi.timer` | `./run.sh backup` | Sunday `03:00` | Runs `rpi-clone` bootable SD card mirror backups. |
+| `ansible-cleanup.timer` | `./run.sh cleanup` | Sunday `04:00` | Vacuums system journals, cleans apt/dnf caches, and prunes Docker. |
+| `ansible-scrub-btrfs.timer` | `./run.sh scrub-btrfs --all` | 1st Sat `01:00` | Monthly Btrfs filesystem scrub for silent bit-rot repair. |
+| `ansible-upgrade-all.timer` | `./run.sh upgrade-all` | Monday `01:00` | Weekly full concurrent cluster upgrade (also triggerable on-demand). |
 
-### Commands
+### Deployment & Management Commands
 ```bash
-# Check status of the last Host 5 upgrade
-./run.sh check-host5
+# Deploy or update systemd timers & services to Host 5
+./run.sh deploy-automation
 
-# Deploy latest upgrade_host5.sh script and enable Docker live-restore
-./run.sh deploy-host5 -K
+# Inspect active timers directly on Host 5
+ssh shawn@192.168.4.5 'systemctl list-timers "ansible-*"'
 
-# Fire-and-forget standalone upgrade via systemd
-./run.sh upgrade-host5 -K
+# Manually trigger a task from CLI (or click "Start" in Cockpit UI)
+ssh shawn@192.168.4.5 'sudo systemctl start ansible-backup-data.service'
+
+# View live journal logs
+ssh shawn@192.168.4.5 'journalctl -u ansible-backup-data.service -f'
 ```
 
 ---
@@ -295,7 +295,7 @@ The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.
   ```
   Deploys and recreates `compose/192.168.4.5/litellm` using `deploy_litellm.yml`.
 * **Routing**:
-  * Chat Completions (`coding-26b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`).
+  * Chat Completions (`coding-12b`, `coding-26b`, `coding-31b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`) with 128k context bounds.
   * Speech-to-Text (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
   * Fallbacks: Configurable in `compose/192.168.4.5/litellm/config/litellm_config.yaml` to seamlessly redirect to cloud APIs (Gemini, Groq, OpenAI) when the Mac is offline.
 * **Mac Firewall Security**:

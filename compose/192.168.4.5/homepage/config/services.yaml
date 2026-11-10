@@ -1,11 +1,5 @@
 ---
 - Core Infrastructure:
-    - Semaphore:
-        icon: semaphore.png
-        href: http://192.168.4.5:3000
-        description: Ansible Automation Controller (Pi 5)
-        server: local-docker
-        container: semaphore
     - PiKVM:
         icon: pikvm.png
         href: https://192.168.4.66

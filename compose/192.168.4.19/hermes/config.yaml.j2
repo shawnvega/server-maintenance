@@ -1,8 +1,19 @@
 model:
   default: {{ hermes_model_name | default('coding-26b') }}
-  provider: custom
+  provider: litellm
   base_url: http://192.168.4.5:4000/v1
   api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
+
+providers:
+  litellm:
+    name: LiteLLM
+    base_url: http://192.168.4.5:4000/v1
+    api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
+    models:
+      - coding-12b
+      - coding-26b
+      - coding-31b
+    discover_models: false
 
 stt:
   enabled: true

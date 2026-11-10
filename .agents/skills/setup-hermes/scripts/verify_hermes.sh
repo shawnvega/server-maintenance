@@ -189,15 +189,13 @@ fi
 
 # 6. Desktop noVNC Port (6080)
 info "6. Checking Virtual Desktop Port 6080..."
-DESKTOP_PORT_STATUS=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
-  docker exec hermes-desktop supervisorctl status novnc 2>/dev/null || echo "UNKNOWN"
-' 2>/dev/null)
+DESKTOP_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://${TARGET_HOST}:6080/vnc.html" 2>/dev/null || echo "000")
 
-if echo "${DESKTOP_PORT_STATUS}" | grep -q "RUNNING"; then
-  pass "Desktop supervisor process 'novnc' is RUNNING"
+if [[ "${DESKTOP_HTTP_CODE}" == "200" ]]; then
+  pass "Virtual Desktop noVNC web interface is responding on port 6080 (HTTP 200)"
 else
-  warn "Desktop supervisor process status: ${DESKTOP_PORT_STATUS}" \
-       "Verify supervisor logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-desktop --tail 30'"
+  warn "Virtual Desktop port 6080 returned HTTP ${DESKTOP_HTTP_CODE}" \
+       "Verify container logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-desktop --tail 30'"
 fi
 
 # 7. Internal TUI Gateway WebSocket Grant & Ticket Check
@@ -224,6 +222,16 @@ CONTAINER_LITELLM_CODE=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
 
 if [[ "${CONTAINER_LITELLM_CODE}" == "200" ]]; then
   pass "hermes-gateway reached LiteLLM proxy at http://${LITELLM_IP}:${LITELLM_PORT}/v1/models (HTTP 200)"
+  MODELS_CATALOG=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
+    docker exec hermes-gateway curl -s -m 5 -H 'Authorization: Bearer ${LITELLM_KEY}' 'http://${LITELLM_IP}:${LITELLM_PORT}/v1/models' 2>/dev/null
+  " 2>/dev/null)
+  for m in coding-12b coding-26b coding-31b; do
+    if echo "${MODELS_CATALOG}" | grep -q "\"id\":\"${m}\""; then
+      pass "LiteLLM advertises coding model '${m}'"
+    else
+      warn "LiteLLM missing coding model '${m}' from catalog" "Check compose/192.168.4.5/litellm/config/litellm_config.yaml"
+    fi
+  done
 elif [[ "${CONTAINER_LITELLM_CODE}" == "401" || "${CONTAINER_LITELLM_CODE}" == "403" ]]; then
   fail "LiteLLM authentication failed (HTTP ${CONTAINER_LITELLM_CODE})" \
        "Verify Bearer token matches LITELLM_KEY ('${LITELLM_KEY}')"
@@ -300,6 +308,74 @@ else
   warn "Hermes STT provider is '${HERMES_STT_PROVIDER}'" \
        "Expected 'openai'. Set with: docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set stt.provider openai"
 fi
+
+# 12. GitHub CLI (gh) Availability
+info "12. Checking GitHub CLI (gh) Availability..."
+GATEWAY_GH=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
+  docker exec -u hermes hermes-gateway which gh 2>/dev/null || echo "NOT_FOUND"
+' 2>/dev/null)
+if [[ "${GATEWAY_GH}" != "NOT_FOUND" ]] && [[ -n "${GATEWAY_GH}" ]]; then
+  pass "GitHub CLI (gh) available in hermes-gateway (${GATEWAY_GH})"
+else
+  fail "GitHub CLI (gh) not found in hermes-gateway" \
+       "Ensure gh is installed in /opt/data/.local/bin/gh"
+fi
+
+DESKTOP_GH=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
+  docker exec -u hermes hermes-desktop which gh 2>/dev/null || echo "NOT_FOUND"
+' 2>/dev/null)
+if [[ "${DESKTOP_GH}" != "NOT_FOUND" ]] && [[ -n "${DESKTOP_GH}" ]]; then
+  pass "GitHub CLI (gh) available in hermes-desktop (${DESKTOP_GH})"
+else
+  warn "GitHub CLI (gh) not found in hermes-desktop" \
+       "Rebuild hermes-desktop with: ./run.sh upgrade --tags docker --limit 192.168.4.19"
+fi
+
+# 13. Java / Kotlin / Gradle Toolchain Availability
+info "13. Checking Java, Kotlin, and Gradle Toolchain in hermes-gateway..."
+JAVA_VER=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
+  docker exec -u hermes hermes-gateway java -version 2>&1 | head -n 1 || echo "NOT_FOUND"
+' 2>/dev/null)
+if [[ "${JAVA_VER}" =~ "21." ]]; then
+  pass "Java 21 available in hermes-gateway (${JAVA_VER})"
+else
+  fail "Java 21 not found in hermes-gateway" \
+       "Expected JDK 21. Got: ${JAVA_VER}"
+fi
+
+KOTLIN_VER=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
+  docker exec -u hermes hermes-gateway kotlinc -version 2>&1 | head -n 1 || echo "NOT_FOUND"
+' 2>/dev/null)
+if [[ "${KOTLIN_VER}" =~ "kotlinc-jvm" ]]; then
+  pass "Kotlin compiler available in hermes-gateway (${KOTLIN_VER})"
+else
+  fail "Kotlin compiler (kotlinc) not found in hermes-gateway" \
+       "Expected kotlinc. Got: ${KOTLIN_VER}"
+fi
+
+GRADLE_VER=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
+  docker exec -u hermes hermes-gateway gradle --version 2>&1 | grep -E "^Gradle [0-9]" || echo "NOT_FOUND"
+' 2>/dev/null)
+if [[ "${GRADLE_VER}" =~ "Gradle 8." ]]; then
+  pass "Gradle available in hermes-gateway (${GRADLE_VER})"
+else
+  fail "Gradle not found in hermes-gateway" \
+       "Expected Gradle 8.x. Got: ${GRADLE_VER}"
+fi
+
+# 14. SSH Cluster Access (192.168.4.5, 192.168.4.18)
+info "14. Checking SSH Cluster Reachability from hermes-gateway..."
+for node in 192.168.4.5 192.168.4.18; do
+  SSH_OUT=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
+    docker exec -u hermes hermes-gateway ssh -o BatchMode=yes -o ConnectTimeout=5 ${node} 'hostname' 2>/dev/null || echo 'FAILED'
+  " 2>/dev/null)
+  if [[ "${SSH_OUT}" != "FAILED" ]] && [[ -n "${SSH_OUT}" ]]; then
+    pass "SSH from hermes-gateway to ${node} (${SSH_OUT}) succeeded"
+  else
+    warn "SSH from hermes-gateway to ${node} failed" \
+         "Ensure hermes deploy key is in ~/.ssh/authorized_keys on ${node}"
+  fi
+done
 
 echo ""
 echo "========================================================"

@@ -14,6 +14,11 @@
             user: shawn
             state: present
             key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFDEAvXkOnrhDKfKF/N/G5yvEepv3JrKmnbJOkwLLJct shawn@rpi5"
+        - name: Add Hermes agent SSH key
+          ansible.posix.authorized_key:
+            user: shawn
+            state: present
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGPtLoQtY9QhQwf5RnDfuNWgV7qmCQvjLZ13jul5CoaI hermes-agent-deploy-key"
         - name: Enable passwordless sudo for shawn
           become: true
           ansible.builtin.copy:
@@ -71,6 +76,11 @@
             user: shawn
             state: present
             key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFDEAvXkOnrhDKfKF/N/G5yvEepv3JrKmnbJOkwLLJct shawn@rpi5"
+        - name: Add Hermes agent SSH key
+          ansible.posix.authorized_key:
+            user: shawn
+            state: present
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGPtLoQtY9QhQwf5RnDfuNWgV7qmCQvjLZ13jul5CoaI hermes-agent-deploy-key"
             
         - name: Enable passwordless sudo for shawn
           become: true

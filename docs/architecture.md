@@ -9,7 +9,7 @@ This document details the hardware, network topology, operating systems, storage
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC RTSP stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119` + desktop `:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
@@ -27,7 +27,7 @@ This document details the hardware, network topology, operating systems, storage
   * `hermes-gateway` (`nousresearch/hermes-agent:latest`): Authenticated REST/WebSocket agent runtime and dashboard on port `9119` (`http://192.168.4.19:9119`). Connects to central LiteLLM proxy on Pi 5 (`192.168.4.5:4000`) with Bearer token authentication, which routes to Apple Silicon backends on the Mac (`192.168.4.8`).
   * `hermes-desktop` (`hermes-desktop:minimal`): Sandboxed X11 / Openbox / noVNC virtual desktop on port `6080` (`http://192.168.4.19:6080`), pre-configured with LXTerminal, Chromium (`--no-sandbox`), and ObConf.
   * **Workspace Storage & Permissions**: `/home/shawn/docker/hermes/data` mounted to `/opt/data` (gateway) and `/home/hermes/workspace` (desktop). Must strictly be mode `0755` (`go-w`) owned by UID 1000; mode `0777` trips Hermes POSIX security validation (`unsafe_control_permissions`).
-  * **Model & STT Resolution**: Runtime default model is managed in `/home/shawn/docker/hermes/data/config.yaml` (`model.default: coding-26b`, `provider: custom`) routed to Pi 5 LiteLLM (`http://192.168.4.5:4000/v1`). Speech-to-text (STT) dictation is routed to LiteLLM model `whisper`, backed by local Apple Silicon `mlx-whisper` on port 8080.
+  * **Model & STT Resolution**: Runtime default model is managed in `/home/shawn/docker/hermes/data/config.yaml` (`model.default: coding-26b`, `provider: litellm`) routed to Pi 5 LiteLLM (`http://192.168.4.5:4000/v1`). Declaring LiteLLM under `providers.litellm` with Bearer auth exposes all 3 local coding models (`coding-12b`, `coding-26b`, and `coding-31b`) backed by host Mac Ollama (`192.168.4.8:11434`) directly in the Web UI model switcher and CLI `/model <alias>`. Speech-to-text (STT) dictation is routed to LiteLLM model `whisper`, backed by local Apple Silicon `mlx-whisper` on port 8080.
 * **Configuration**: Managed under `compose/192.168.4.19/hermes/` and documented in [.agents/skills/setup-hermes/SKILL.md](../.agents/skills/setup-hermes/SKILL.md) and [.agents/skills/mlx-whisper/SKILL.md](../.agents/skills/mlx-whisper/SKILL.md).
 
 ### 2. OpenClaw UTM VMs (`192.168.64.6`, `192.168.64.9`)
@@ -52,7 +52,7 @@ This document details the hardware, network topology, operating systems, storage
   * **Permissions & Group Access**: Runs as `PUID=1000` (`shawn`) and `PGID=990` (`docker` group) to grant read-only access to `/var/run/docker.sock` for live container health badges.
   * **Configuration Source of Truth**: Managed under `compose/192.168.4.5/homepage/config/` (`services.yaml`, `widgets.yaml`, `bookmarks.yaml`, `docker.yaml`, `settings.yaml`). Deployed and reloaded via `./run.sh homepage`.
   * **Cluster Service Catalog**:
-    * **Core Infrastructure** (5 columns): Semaphore (`:3000`), PiKVM (`https://192.168.4.66`), Cockpit Pi 5 (`https://192.168.4.5:9090`), Cockpit Fedora (`https://192.168.4.19:9090`), Caddy Proxy (`http://192.168.4.5`).
+    * **Core Infrastructure** (4 columns): PiKVM (`https://192.168.4.66`), Cockpit Pi 5 (`https://192.168.4.5:9090`), Cockpit Fedora (`https://192.168.4.19:9090`), Caddy Proxy (`http://192.168.4.5`).
     * **Automation & AI** (4 columns): Hermes Desktop (`:6080`), Hermes Gateway (`:9119`), OpenClaw Gateway (`192.168.64.6:18789`), OpenClaw Exp (`192.168.64.9:18789`).
     * **Media & Storage** (4 columns): OpenMediaVault (`http://192.168.4.4`), Immich (`https://immich.vvvega.com`), Jellyfin (`:8096`), Syncthing (`:8384`).
     * **Monitoring** (3 columns): Glances CPU metrics across all 5 active Linux nodes (`.5`, `.4`, `.19`, `.18`, `.11`) plus Frigate NVR (`https://192.168.4.19:8971`).

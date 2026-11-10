@@ -7,7 +7,7 @@ This repository manages automation and configuration for self-hosted home server
 | Host | User | OS | Backup Method | Mode | Containers / Workloads |
 |---|---|---|---|---|---|
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
-| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), `semaphore` (`:3000`, LAN only), native Caddy reverse proxy |
+| `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119` + desktop `:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
@@ -37,8 +37,9 @@ This repository isolates Ansible and its dependencies in a project-local virtual
    * Runs Arch Linux ARM as `root` (no `sudo` required).
    * Uses `ansible_remote_tmp=/tmp/.ansible` (writes to `tmpfs` because `/root` is read-only).
    * Never run `apt`, `dpkg`, or `raspi-config` on PiKVM. Updates run strictly via `/usr/bin/pikvm-update --no-reboot`.
-6. **Semaphore Runner Safety (`192.168.4.5`)**:
-   * When running from Semaphore UI, Host 5 is safely skipped in master playbooks. Use `check-host5`, `deploy-host5`, or `upgrade-host5` for Host 5 maintenance.
+6. **Cockpit Systemd Automation (`192.168.4.5`)**:
+   * Scheduled tasks (`ansible-backup-data`, `ansible-check-btrfs`, `ansible-cleanup`, `ansible-backup-rpi`, `ansible-scrub-btrfs`) run as native systemd timers on Host 5 and are monitored via Cockpit (:9090).
+   * Deploy or update them anytime using `./run.sh deploy-automation`. On-demand master upgrades can be started directly in Cockpit via `ansible-upgrade-all.service`.
 7. **Hermes Workspace Permissions (`192.168.4.19`)**:
    * Host data directory `/home/shawn/docker/hermes/data` must strictly be mode `0755` (`go-w`) and owned by UID 1000 (`shawn`). Never set `0777` (world-writable), which fails Hermes internal security gates (`unsafe_control_permissions`) and traps the chat TUI in an endless 30s reconnect loop.
 
@@ -54,8 +55,10 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 | **Upgrade Pipelines & Lifecycles** | [docs/pipelines.md](docs/pipelines.md) | `upgrade_all.yml`, `upgrade.yml`, stage gates (scrub, load, reboot), tag execution, Mac upgrades |
 | **Btrfs Storage & Scrubs** | [docs/storage-btrfs.md](docs/storage-btrfs.md) | Health checks (`check-btrfs`), scrubs (`scrub-btrfs`), RAID 1 `/var` migration & drive replacement |
 | **Read-Only Appliances** | [docs/appliances.md](docs/appliances.md) | OverlayFS Pi (`.11`) RW/RO lifecycle & recovery, Arch PiKVM (`.66`) mounts & `pikvm-update` |
-| **Workflows, Caddy & Vault** | [docs/workflows.md](docs/workflows.md) | Native Caddy reload, Host 5 Semaphore safety, Immich sync, password update, Vault rekey |
-| **Troubleshooting & Recovery** | [docs/troubleshooting.md](docs/troubleshooting.md) | High loadavg halts, backup failures, Btrfs error stats, RO rescue commands, VLC restart, Hermes reconnect loops |
+| **Hermes Agent Stack** | [docs/hermes.md](docs/hermes.md) | Gateway/desktop dual-container architecture, LiteLLM/Ollama routes, permissions invariants, STT |
+| **Homepage Dashboard** | [docs/homepage.md](docs/homepage.md) | Dashboard architecture, Caddy reverse proxy, Glances widgets, host header rules, Docker socket |
+| **Workflows, Caddy & Vault** | [docs/workflows.md](docs/workflows.md) | Native Caddy reload, Cockpit systemd automation, Immich sync, password update, Vault rekey |
+| **Troubleshooting & Recovery** | [docs/troubleshooting.md](docs/troubleshooting.md) | Quick incident triage matrix, instant CLI recovery commands, links to deep guides |
 
 ---
 
@@ -97,6 +100,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 ./run.sh check-host5                     # Inspect Host 5 status log
 ./run.sh upgrade-host5 -K                # Trigger detached standalone upgrade for Host 5
 ./run.sh backup-data -K                  # Sync Immich DB & data shares to Pi 5
+./run.sh deploy-automation               # Deploy systemd timers & services for Cockpit (:9090) on Pi 5
 
 # Ad-hoc Shell & Container Commands
 ./run.sh raw 'uptime'

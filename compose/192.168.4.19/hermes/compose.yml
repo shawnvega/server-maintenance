@@ -1,11 +1,14 @@
 services:
   gateway:
-    image: nousresearch/hermes-agent:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    image: hermes-gateway:custom
     container_name: hermes-gateway
     restart: unless-stopped
     command: ["gateway", "run"]
     shm_size: "1gb"
-    mem_limit: 2560m
+    mem_limit: 4096m
     mem_reservation: 1024m
     cpus: 1.5
     ports:
@@ -21,9 +24,16 @@ services:
       - OPENAI_BASE_URL=http://192.168.4.5:4000/v1
       - OPENAI_API_KEY=${LITELLM_API_KEY:-sk-hermes-mac-secret}
       - MODEL_NAME=${HERMES_MODEL:-coding-26b}
+      - HERMES_TUI_RPC_TIMEOUT_MS=${HERMES_TUI_RPC_TIMEOUT_MS:-240000}
+      - HERMES_STREAM_READ_TIMEOUT=${HERMES_STREAM_READ_TIMEOUT:-240}
     volumes:
       - /home/shawn/docker/hermes/data:/opt/data
+      - /home/shawn/docker:/home/shawn/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro
       - /etc/localtime:/etc/localtime:ro
+    group_add:
+      - "977"
     networks:
       - hermes-net
 
@@ -45,9 +55,15 @@ services:
     environment:
       - DISPLAY=:1
       - HOME=/home/hermes
+      - HERMES_TUI_RPC_TIMEOUT_MS=${HERMES_TUI_RPC_TIMEOUT_MS:-240000}
+      - HERMES_STREAM_READ_TIMEOUT=${HERMES_STREAM_READ_TIMEOUT:-240}
     volumes:
       - /home/shawn/docker/hermes/data:/home/hermes/workspace
+      - /home/shawn/docker:/home/shawn/docker
+      - /var/run/docker.sock:/var/run/docker.sock
       - /etc/localtime:/etc/localtime:ro
+    group_add:
+      - "977"
     networks:
       - hermes-net
 

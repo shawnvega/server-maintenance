@@ -19,7 +19,7 @@
         group: shawn
         mode: '0755'
 
-    - name: Remove legacy cron job (migrated to Semaphore / backup_data.yml)
+    - name: Remove legacy cron job (migrated to Cockpit systemd timer / backup_data.yml)
       ansible.builtin.cron:
         name: "Nightly Immich backup to 192.168.4.5"
         user: root

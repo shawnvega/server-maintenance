@@ -31,6 +31,7 @@ When encountering issues, locate your symptom below for the instant verified fix
 | LiteLLM access logs show 404 for `GET /api/tags` and `POST /api/show` | Hermes model name starts with `ollama/`, triggering native route probes | Model aliasing: Use alias `coding-26b` and `provider: custom` to force OpenAI wire routes (`/v1/*`) |
 | `curl: (56) Recv failure` immediately after starting container | s6-overlay init stages require 10–15s for migrations and uvicorn | Allow cold-boot grace period (~15s) until `HERMES_DASHBOARD_READY` appears in logs |
 | Voice dictation / mic fails or disabled in dashboard | Insecure HTTP origin (`getUserMedia`) or missing STT backend | Run `./run.sh setup-whisper` and enable `chrome://flags/#unsafely-treat-insecure-origin-as-secure` |
+| Web UI model switcher only shows `coding-26b` | Bare `custom` provider probes `/models` without auth (HTTP 401) | Define `providers.litellm` in `config.yaml` with Bearer key and restart gateway |
 
 ---
 
@@ -41,7 +42,7 @@ When encountering issues, locate your symptom below for the instant verified fix
   * Hardware: Intel Core i5-8200Y (2 cores / 4 threads), 8GB RAM.
   * Co-located workload: Frigate NVR (Coral TPU + `/dev/dri/renderD128` Intel VAAPI transcoding).
   * **Resource Allocation**:
-    * `hermes-gateway`: `mem_limit: 2560m`, `mem_reservation: 1024m`, `cpus: 1.5`.
+    * `hermes-gateway`: `mem_limit: 4096m`, `mem_reservation: 1024m`, `cpus: 1.5`.
     * `hermes-desktop`: `mem_limit: 1536m`, `mem_reservation: 512m`, `cpus: 1.0`.
     * Combined maximum memory allocation is ~4GB, preserving 4GB for Fedora system overhead and Frigate NVR.
 * **Dual-Container Stack (`compose/192.168.4.19/hermes/`)**:
@@ -49,9 +50,30 @@ When encountering issues, locate your symptom below for the instant verified fix
   * **`hermes-desktop`** (Port **`6080`**): Sandboxed virtual desktop (`hermes-desktop:minimal`) running `Xvfb` (display `:1`, 1280x800 24-bit TrueColor), `openbox`, `lxterminal`, `chromium` (`--no-sandbox`), and `noVNC` via `websockify`.
   * **Shared Workspace**: `/home/shawn/docker/hermes/data` mounted to `/opt/data` (gateway) and `/home/hermes/workspace` (desktop).
 * **LLM & Audio STT Provider**:
-  * Engine (Host Mac at `192.168.4.8`): Local Ollama serving `gemma4:26b-mlx-code` (`:11434`) + local MLX Whisper (`:8080`), protected by macOS PF firewall whitelist.
+  * Engine (Host Mac at `192.168.4.8`): Local Ollama serving 3 local coding models (`gemma4:12b-mlx-code`, `gemma4:26b-mlx-code`, `gemma4:31b-mlx-code` on port `11434`) + local MLX Whisper (`:8080`), protected by macOS PF firewall whitelist.
   * Central Proxy (Pi 5 at `192.168.4.5:4000`): Dockerized LiteLLM proxy with Bearer token authentication (`sk-hermes-mac-secret`), managed via `compose/192.168.4.5/litellm` and `./run.sh litellm`.
-  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring alias `coding-26b` for LLM and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
+  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring aliases `coding-12b`, `coding-26b` (default), and `coding-31b` for LLM, and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
+
+### Coding Models Quick Reference & Usage
+| Model Alias | Underlying Ollama Model | Footprint | Best Used For |
+|---|---|---|---|
+| `coding-12b` | `gemma4:12b-mlx-code` | ~7.7 GB | Fast interactive edits, simple functions, low resource consumption |
+| `coding-26b` | `gemma4:26b-mlx-code` | ~17 GB | **Default model**: Balanced general-purpose coding agent workflows |
+| `coding-31b` | `gemma4:31b-mlx-code` | ~19 GB | Complex multi-file reasoning, deep refactoring, complex logic |
+
+#### How to Switch Between Coding Models
+1. **In-Chat Hot-Swapping (Mid-Session)**:
+   Inside any active Hermes web chat session, TUI, or gateway client, type:
+   ```text
+   /model coding-12b
+   /model coding-26b
+   /model coding-31b
+   ```
+2. **Persistent Default Model Switching**:
+   To change the default model loaded across new sessions:
+   ```bash
+   ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set model.default coding-31b && docker restart hermes-gateway"
+   ```
 
 ### Core Invariants
 
@@ -59,7 +81,7 @@ When encountering issues, locate your symptom below for the instant verified fix
 > 1. **Workspace Permissions (`0755`)**: Host directory `/home/shawn/docker/hermes/data` must strictly be mode `0755` (`go-w`) and owned by UID 1000 (`shawn`). Never use `0777` (world-writable), which trips Hermes internal security gates (`unsafe_control_permissions`) and traps the chat UI in an endless 30s reconnect loop.
 > 2. **Fedora Timezone**: Fedora has no `/etc/timezone`. Mount **only** `/etc/localtime:/etc/localtime:ro`.
 > 3. **LiteLLM Health Probes**: Never use `/health` to evaluate LiteLLM proxy status (stateless mode returns 500 due to an upstream Prisma check bug). Probe `GET /v1/models` instead.
-> 4. **Model Configuration Precedence**: Hermes reads model definitions from `/opt/data/config.yaml`. Ansible automatically pre-seeds `config.yaml` on fresh deployments using `compose/192.168.4.19/hermes/config.yaml.j2`.
+> 4. **Model Configuration Precedence & Provider Declaration**: Hermes reads model definitions from `/opt/data/config.yaml`. To ensure the Web UI model switcher populates all coding models (`coding-12b`, `coding-26b`, `coding-31b`), LiteLLM must be declared under `providers.litellm` with Bearer auth and `model.provider: litellm` (bare `provider: custom` discovery probes fail with 401). Ansible automatically pre-seeds `config.yaml` on fresh deployments using `compose/192.168.4.19/hermes/config.yaml.j2`.
 
 ---
 
@@ -174,6 +196,10 @@ This automated suite tests:
 8. Container-to-Mac cross-host LiteLLM reachability.
 9. Active Hermes profile model (`coding-26b`).
 10. End-to-end chat completion inference.
+11. Local MLX Whisper STT pipeline reachability.
+12. GitHub CLI (`gh`) availability and configuration in `hermes-gateway` and `hermes-desktop`.
+13. Java 21, Kotlin compiler, and Gradle toolchain availability in `hermes-gateway`.
+14. Outbound SSH access from Hermes to cluster nodes (`192.168.4.5`, `192.168.4.18`).
 
 ---
 
