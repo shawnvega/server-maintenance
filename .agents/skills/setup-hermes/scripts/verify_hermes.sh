@@ -12,6 +12,9 @@ MAC_IP="${MAC_IP:-192.168.4.8}"
 LITELLM_IP="${LITELLM_IP:-192.168.4.5}"
 LITELLM_PORT="${LITELLM_PORT:-4000}"
 LITELLM_KEY="${LITELLM_KEY:-sk-hermes-mac-secret}"
+HERMES_API_KEY="${HERMES_API_KEY:-800e4dd6423a533409960e90e1b03a6a2d5687ee63ef4ac7f759f425dd1388de}"
+HERMES_API_PORT="${HERMES_API_PORT:-8642}"
+OPENWEBUI_PORT="${OPENWEBUI_PORT:-3000}"
 DEFAULT_MODEL="${DEFAULT_MODEL:-coding-26b}"
 QUICK_MODE=false
 
@@ -376,6 +379,38 @@ for node in 192.168.4.5 192.168.4.18; do
          "Ensure hermes deploy key is in ~/.ssh/authorized_keys on ${node}"
   fi
 done
+
+# 15. Hermes Agent Native OpenAI API Server (port 8642)
+info "15. Checking Hermes Agent API Server on ${TARGET_HOST}:${HERMES_API_PORT}..."
+HERMES_API_CODE=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
+  curl -s -o /dev/null -w '%{http_code}' -m 5 -H 'Authorization: Bearer ${HERMES_API_KEY}' 'http://127.0.0.1:${HERMES_API_PORT}/v1/models' 2>/dev/null || echo '000'
+" 2>/dev/null)
+
+if [[ "${HERMES_API_CODE}" == "200" ]]; then
+  pass "Hermes Agent OpenAI API server is responding on port ${HERMES_API_PORT} (HTTP 200)"
+  HERMES_MODELS=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "
+    curl -s -m 5 -H 'Authorization: Bearer ${HERMES_API_KEY}' 'http://127.0.0.1:${HERMES_API_PORT}/v1/models' 2>/dev/null
+  " 2>/dev/null)
+  if echo "${HERMES_MODELS}" | grep -q "hermes-agent"; then
+    pass "Hermes Agent advertises 'hermes-agent' model on /v1/models"
+  else
+    warn "Model 'hermes-agent' not found in API response: ${HERMES_MODELS}"
+  fi
+else
+  fail "Hermes Agent API server returned HTTP ${HERMES_API_CODE} on port ${HERMES_API_PORT}" \
+       "Check gateway logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-gateway --tail 40'"
+fi
+
+# 16. Open-WebUI Service (port 3000)
+info "16. Checking Open-WebUI Service on ${TARGET_HOST}:${OPENWEBUI_PORT}..."
+OPENWEBUI_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://${TARGET_HOST}:${OPENWEBUI_PORT}/" 2>/dev/null || echo "000")
+
+if [[ "${OPENWEBUI_CODE}" == "200" ]]; then
+  pass "Open-WebUI web interface is responding on port ${OPENWEBUI_PORT} (HTTP 200)"
+else
+  warn "Open-WebUI returned HTTP ${OPENWEBUI_CODE} on port ${OPENWEBUI_PORT}" \
+       "Verify container: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs open-webui --tail 30'"
+fi
 
 echo ""
 echo "========================================================"

@@ -27,6 +27,8 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | Hermes shows 256k context window (`.../256k`) instead of 128k | Base architecture metadata reports 256k; LiteLLM lacks `model_info` | [17. Context Window Mismatch (128k vs 256k)](#17-context-window-mismatch-128k-vs-256k-between-ollama-litellm-and-hermes) |
 | Voice dictation / mic fails or is disabled in dashboard | Insecure HTTP origin (`getUserMedia`) or missing STT backend | [18. Voice Dictation & MLX Whisper Setup](#18-voice-dictation-speech-to-text-and-mlx-whisper-integration) |
 | Web UI model switcher only shows `coding-26b` | Bare `custom` provider probes `/models` without auth (HTTP 401) | [19. Web UI Model Switcher Only Displays Default Model](#19-web-ui-model-switcher-only-displays-default-model-coding-26b) |
+| `[api_server] Refusing to start: API_SERVER_KEY is a placeholder or too short (<16 chars)` | Hermes requires 16+ char API key; `/opt/data/.env` wins over Docker env | [20. Hermes Native OpenAI API Server Key Strength & Precedence](#20-hermes-native-openai-api-server-key-strength--precedence) |
+| Open-WebUI only routes to one backend or fails auth with multiple endpoints | Open-WebUI requires semicolon separation for multi-backend URLs & keys | [21. Open-WebUI Multi-Backend Semicolon Syntax](#21-open-webui-multi-backend-semicolon-syntax) |
 
 ---
 
@@ -467,4 +469,39 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
   ```bash
   ssh shawn@192.168.4.19 "docker restart hermes-gateway"
   ```
+
+---
+
+### 20. Hermes Native OpenAI API Server Key Strength & Precedence
+* **The Symptom**:
+  Hermes Gateway refuses to start the `api_server` platform with error:
+  ```text
+  [api_server] Refusing to start: API_SERVER_KEY is a placeholder or too short (<16 chars). This endpoint dispatches terminal-capable agent work — a guessable key is remote code execution. Generate a strong secret (e.g. `openssl rand -hex 32`) and set API_SERVER_KEY before starting the API server on 0.0.0.0.
+  ```
+  Or external curl requests to `http://192.168.4.19:8642/v1/models` return HTTP 401 Unauthorized despite setting `HERMES_API_KEY` in `.env.j2`.
+* **Root Cause**:
+  1. Hermes enforces a strict minimum length of 16 characters on `API_SERVER_KEY` via `has_usable_secret(key, min_length=16)` in `gateway/platforms/api_server.py`.
+  2. Hermes container startup (`stage2-hook.sh`) loads `/opt/data/.env` with `override=True`, which takes precedence over environment variables defined in Docker compose or `.env`.
+* **The Fix**:
+  Generate a 32+ character random secret (e.g. `openssl rand -hex 32`), declare it in `compose.yml` and `.env.j2`, and ensure `/home/shawn/docker/hermes/data/.env` is kept in sync:
+  ```bash
+  ssh shawn@192.168.4.19 "grep API_SERVER_KEY /home/shawn/docker/hermes/data/.env"
+  ```
+
+---
+
+### 21. Open-WebUI Multi-Backend Semicolon Syntax
+* **The Symptom**:
+  Open-WebUI only lists models from the first configured backend, or returns HTTP 401/404 when attempting to query secondary endpoints like LiteLLM or Hermes Agent.
+* **Root Cause**:
+  Open-WebUI supports multiple OpenAI-compatible backends using `OPENAI_API_BASE_URLS` and `OPENAI_API_KEYS`, but requires them to be strictly separated by **semicolons (`;`)**, not commas or spaces:
+* **The Fix**:
+  Configure compose / `.env` with matching semicolon-separated lists:
+  ```yaml
+  environment:
+    - OPENAI_API_BASE_URLS=http://192.168.4.19:8642/v1;http://192.168.4.5:4000/v1
+    - OPENAI_API_KEYS=${HERMES_API_KEY};${LITELLM_API_KEY}
+    - DEFAULT_MODELS=hermes-agent
+  ```
+
 

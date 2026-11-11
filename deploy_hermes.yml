@@ -1,0 +1,14 @@
+---
+- name: Deploy Hermes Agent to Fedora Workstation
+  hosts: 192.168.4.19
+  gather_facts: true
+  vars:
+    stack_item: "docker/hermes"
+  tasks:
+    - name: Load vault variables if available
+      ansible.builtin.include_vars:
+        file: vars/vault.yml
+      failed_when: false
+
+    - name: Deploy and restart Hermes stack
+      ansible.builtin.include_tasks: tasks/restart_docker_stack.yml

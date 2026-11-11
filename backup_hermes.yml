@@ -1,0 +1,267 @@
+---
+- name: Orchestrate Hermes Agent dual-tier backup (192.168.4.19 to Local HDD & Pi 5)
+  hosts: 192.168.4.19
+  gather_facts: false
+
+  vars:
+    hermes_data_dir: "/home/shawn/docker/hermes/data"
+    local_mount: "/srv/67e597dd-6061-415d-8a37-2246eabee10a"
+    local_backup_root: "/srv/67e597dd-6061-415d-8a37-2246eabee10a/backups/hermes"
+    target_host: "192.168.4.5"
+    target_user: "shawn"
+    target_mount: "/srv/dev-disk-by-uuid-c1c2d4dd-bc6b-4f1f-88dd-e4c8b48d2c3a"
+    remote_backup_dir: "/srv/dev-disk-by-uuid-c1c2d4dd-bc6b-4f1f-88dd-e4c8b48d2c3a/hermes_backup"
+    ssh_key: "/home/shawn/.ssh/id_ed25519"
+    db_stage_dir: "/tmp/hermes_db_stage"
+    exclude_file: "/tmp/hermes_rsync_exclude.txt"
+    log_dir: "/home/shawn/logs"
+    retention_days_local: 7
+    retention_days_remote: 14
+
+  tasks:
+    - name: Ensure logs directory exists
+      ansible.builtin.file:
+        path: "{{ log_dir }}"
+        state: directory
+        mode: "0755"
+
+    # -------------------------------------------------------------------------
+    # Pre-flight Mount & Reachability Verification
+    # -------------------------------------------------------------------------
+    - name: Verify Hermes data directory exists
+      ansible.builtin.stat:
+        path: "{{ hermes_data_dir }}"
+      register: hermes_data_stat
+      failed_when: not hermes_data_stat.stat.exists or not hermes_data_stat.stat.isdir
+
+    - name: Verify local secondary storage mount exists on 192.168.4.19
+      ansible.builtin.command:
+        cmd: "fgrep -q {{ local_mount }} /proc/mounts"
+      register: local_mount_check
+      changed_when: false
+      failed_when: local_mount_check.rc != 0
+
+    - name: Verify target host storage is mounted and reachable over SSH
+      ansible.builtin.command:
+        cmd: >-
+          ssh -i {{ ssh_key }} -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new
+          {{ target_user }}@{{ target_host }}
+          "fgrep -q {{ target_mount }} /proc/mounts"
+      register: tgt_mount_check
+      changed_when: false
+      failed_when: tgt_mount_check.rc != 0
+
+    - name: Get current backup timestamp
+      ansible.builtin.command:
+        cmd: "date +%Y%m%d_%H%M%S"
+      register: backup_ts
+      changed_when: false
+
+    - name: Set backup snapshot facts
+      ansible.builtin.set_fact:
+        snapshot_name: "snapshot-{{ backup_ts.stdout | trim }}"
+        current_snapshot_local: "{{ local_backup_root }}/snapshot-{{ backup_ts.stdout | trim }}"
+        current_snapshot_remote: "{{ remote_backup_dir }}/snapshot-{{ backup_ts.stdout | trim }}"
+
+    # -------------------------------------------------------------------------
+    # Atomic SQLite Online Backup & Integrity Verification
+    # -------------------------------------------------------------------------
+    - name: Ensure clean SQLite staging directory
+      ansible.builtin.file:
+        path: "{{ db_stage_dir }}"
+        state: "{{ item }}"
+        mode: "0700"
+      loop:
+        - absent
+        - directory
+
+    - name: Perform non-blocking atomic backup of active SQLite databases
+      ansible.builtin.shell:
+        cmd: |
+          python3 - <<'EOF'
+          import glob, os, sqlite3, sys
+
+          stage_dir = "{{ db_stage_dir }}"
+          data_dir = "{{ hermes_data_dir }}"
+          db_files = glob.glob(os.path.join(data_dir, "*.db"))
+
+          if not db_files:
+              print("No sqlite databases found in data directory.")
+              sys.exit(0)
+
+          for db_path in db_files:
+              base_name = os.path.basename(db_path)
+              target_path = os.path.join(stage_dir, base_name)
+              
+              # Open source in read-only URI mode to avoid locking
+              src_conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+              dst_conn = sqlite3.connect(target_path)
+              with dst_conn:
+                  src_conn.backup(dst_conn, pages=100)
+              dst_conn.close()
+              src_conn.close()
+
+              # Integrity verification
+              verify_conn = sqlite3.connect(target_path)
+              check_result = verify_conn.execute("PRAGMA integrity_check;").fetchone()[0]
+              verify_conn.close()
+
+              if check_result != "ok":
+                  print(f"INTEGRITY CHECK FAILED for {base_name}: {check_result}", file=sys.stderr)
+                  sys.exit(1)
+
+              print(f"Backed up and verified: {base_name}")
+          EOF
+      register: db_backup_result
+      changed_when: true
+
+    - name: Display database backup summary
+      ansible.builtin.debug:
+        var: db_backup_result.stdout_lines
+
+    # -------------------------------------------------------------------------
+    # Tier A: Local Rolling Snapshot (/dev/sda1)
+    # -------------------------------------------------------------------------
+    - name: Ensure local backup directory exists
+      ansible.builtin.file:
+        path: "{{ local_backup_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy rsync exclude filter
+      ansible.builtin.copy:
+        dest: "{{ exclude_file }}"
+        content: |
+          cache/***
+          .cache/***
+          audio_cache/***
+          image_cache/***
+          .gradle/***
+          installs/***
+          logs/***
+          *.zip
+          *.tmp
+          *.sock
+          *.pid
+          *.lock
+          *.db
+          *.db-shm
+          *.db-wal
+          tui-pending-inputs/***
+          gateway.sock
+          gateway.pid
+          gateway-starts.log
+        mode: "0600"
+
+    - name: Check if previous local latest snapshot exists for hardlinking
+      ansible.builtin.stat:
+        path: "{{ local_backup_root }}/latest"
+      register: local_latest_stat
+
+    - name: Create local incremental snapshot via rsync
+      ansible.builtin.command:
+        cmd: >-
+          rsync -ah --delete-after
+          {{ '--link-dest=' + local_backup_root + '/latest' if local_latest_stat.stat.exists else '' }}
+          --exclude-from={{ exclude_file }}
+          {{ hermes_data_dir }}/ {{ current_snapshot_local }}/
+      register: local_rsync_res
+      changed_when: true
+
+    - name: Copy verified SQLite databases into local snapshot
+      ansible.builtin.shell:
+        cmd: "cp -a {{ db_stage_dir }}/*.db {{ current_snapshot_local }}/"
+      changed_when: true
+
+    - name: Update local latest symlink
+      ansible.builtin.file:
+        src: "{{ current_snapshot_local }}"
+        dest: "{{ local_backup_root }}/latest"
+        state: link
+        force: true
+
+    - name: Prune old local snapshots beyond retention period
+      ansible.builtin.shell:
+        cmd: "find {{ local_backup_root }} -maxdepth 1 -name 'snapshot-*' -type d -mtime +{{ retention_days_local }} -exec rm -rf {} +"
+      changed_when: false
+
+    # -------------------------------------------------------------------------
+    # Tier B: Remote Replication to Raspberry Pi 5
+    # -------------------------------------------------------------------------
+    - name: Ensure remote backup directory exists on Pi 5
+      ansible.builtin.command:
+        cmd: >-
+          ssh -i {{ ssh_key }} -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+          {{ target_user }}@{{ target_host }}
+          "mkdir -p {{ remote_backup_dir }}"
+      changed_when: false
+
+    - name: Check if previous remote latest snapshot exists on Pi 5
+      ansible.builtin.command:
+        cmd: >-
+          ssh -i {{ ssh_key }} -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+          {{ target_user }}@{{ target_host }}
+          "test -d {{ remote_backup_dir }}/latest"
+      register: remote_latest_check
+      failed_when: false
+      changed_when: false
+
+    - name: Replicate snapshot to Pi 5 via rsync over SSH
+      ansible.builtin.command:
+        cmd: >-
+          rsync -ah
+          -e "ssh -i {{ ssh_key }} -o StrictHostKeyChecking=accept-new"
+          {{ '--link-dest=' + remote_backup_dir + '/latest' if remote_latest_check.rc == 0 else '' }}
+          --delete-after
+          {{ current_snapshot_local }}/
+          {{ target_user }}@{{ target_host }}:{{ current_snapshot_remote }}/
+      register: remote_sync_res
+      changed_when: true
+
+    - name: Update remote latest symlink on Pi 5
+      ansible.builtin.command:
+        cmd: >-
+          ssh -i {{ ssh_key }} -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+          {{ target_user }}@{{ target_host }}
+          "ln -sfn {{ current_snapshot_remote }} {{ remote_backup_dir }}/latest"
+      changed_when: true
+
+    - name: Prune old remote snapshots on Pi 5
+      ansible.builtin.command:
+        cmd: >-
+          ssh -i {{ ssh_key }} -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+          {{ target_user }}@{{ target_host }}
+          "find {{ remote_backup_dir }} -maxdepth 1 -name 'snapshot-*' -type d -mtime +{{ retention_days_remote }} -exec rm -rf {} +"
+      changed_when: false
+
+    # -------------------------------------------------------------------------
+    # Cleanup & Invariant Verification
+    # -------------------------------------------------------------------------
+    - name: Remove temporary files and staging directory
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ db_stage_dir }}"
+        - "{{ exclude_file }}"
+
+    - name: Enforce strict workspace permissions invariant (0755, go-w)
+      ansible.builtin.file:
+        path: "{{ hermes_data_dir }}"
+        mode: "0755"
+        state: directory
+
+    - name: Record backup completion in log
+      ansible.builtin.shell:
+        cmd: >-
+          date >> {{ log_dir }}/date &&
+          echo "Ansible hermes-agent backup completed: {{ snapshot_name }} at $(date)" >> {{ log_dir }}/backup.log
+      changed_when: true
+
+    - name: Display backup summary
+      ansible.builtin.debug:
+        msg:
+          - "Hermes Backup Completed Successfully!"
+          - "Snapshot: {{ snapshot_name }}"
+          - "Local Storage: {{ current_snapshot_local }}"
+          - "Remote Storage: {{ target_host }}:{{ current_snapshot_remote }}"

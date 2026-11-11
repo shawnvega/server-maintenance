@@ -10,8 +10,9 @@ Host `192.168.4.19` (Fedora Linux 43 x86_64, Btrfs root) runs a dual-container a
 
 | Container | Port | Role & Image | Resource Allocation |
 |---|---|---|---|
-| **`hermes-gateway`** | `9119` (HTTP/WS) | Agent runtime, CLI, tool execution engine, web dashboard (`nousresearch/hermes-agent:latest`) | `cpus: 1.5`, `mem_limit: 2560m`, `mem_reservation: 1024m` |
+| **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 1.5`, `mem_limit: 4096m`, `mem_reservation: 1024m` |
 | **`hermes-desktop`** | `6080` (HTTP/VNC) | Unprivileged sandbox for browser/UI automation (`hermes-desktop:minimal`): `Xvfb` (:1, 1280x800), `openbox`, `chromium` (`--no-sandbox`), `noVNC` | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
+| **`open-webui`** | `3000` (HTTP WebUI) | Feature-rich AI chat interface connected to Hermes Agent (`:8642`) and LiteLLM (`:4000`) (`ghcr.io/open-webui/open-webui:main`) | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 
 * **Co-located Workload**: Frigate NVR (Coral TPU + `/dev/dri/renderD128` Intel VAAPI transcoding) shares the host. Resource limits preserve ~4GB RAM for Fedora and Frigate.
 * **Shared Storage**: Host directory `/home/shawn/docker/hermes/data` is mounted to `/opt/data` in `hermes-gateway` and `/home/hermes/workspace` in `hermes-desktop`.
@@ -108,4 +109,76 @@ Run the automated end-to-end test suite:
 ```bash
 ./run.sh test-hermes
 ```
-Verifies gateway bootstrap grant, LiteLLM model listing, test inference completion, and STT routes.
+Verifies gateway bootstrap grant, LiteLLM model listing, test inference completion, STT routes, Hermes OpenAI API server (`:8642`), and Open-WebUI (`:3000`).
+
+---
+
+## 5. Open-WebUI & Client Endpoints
+
+| Client / Interface | URL / Endpoint | Credentials | Role |
+|---|---|---|---|
+| **Open-WebUI Dashboard** | `http://192.168.4.19:3000/` | Initial admin onboarding | Full-featured ChatGPT-style interface with `hermes-agent` and LiteLLM models |
+| **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer token (`API_SERVER_KEY`) | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
+| **Hermes Gateway Web UI** | `http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace |
+| **Hermes Virtual Desktop** | `http://192.168.4.19:6080/` | None (sandboxed) | noVNC graphical browser/desktop environment |
+| **macOS Native App** | `/Applications/Hermes.app` | Gateway URL: `http://192.168.4.19:9119` | Remote gateway client |
+
+---
+
+## 6. Backup, Consistency & Disaster Recovery
+
+Hermes Agent stores live conversation histories, SQLite databases, skills, memories, and API keys in `/home/shawn/docker/hermes/data` (~5.0 GB raw). A dual-tier automated backup architecture protects this data with zero agent downtime:
+
+* **Tier A (Local Snapshots)**: Rolling hardlink snapshots on Host 19 secondary 6.4TB HDD (`/srv/67e597dd-6061-415d-8a37-2246eabee10a/backups/hermes/`) for sub-minute rollback.
+* **Tier B (Off-Host Mirror)**: Replicated to Raspberry Pi 5 central Btrfs storage (`/srv/dev-disk-by-uuid-c1c2d4dd-bc6b-4f1f-88dd-e4c8b48d2c3a/hermes_backup/`) for total disaster recovery.
+* **Consistency**: Non-blocking atomic backups of all SQLite databases (`state.db`, `kanban.db`, `projects.db`, etc.) via Python C-API `sqlite3.backup()` with automated `PRAGMA integrity_check` verification.
+* **Efficiency**: Excludes disposable caches (`cache/`, `.cache/`, `.gradle/`, `installs/`, temporary archives, runtime locks), reducing snapshot size by >80% to under 900 MB.
+* **Workspace Invariant**: Guarantees mode `0755` (`go-w`) and UID `1000` (`shawn`) across backup and restore cycles.
+
+### Running On-Demand Backup
+```bash
+./run.sh backup-hermes
+```
+
+### Automated Cockpit Scheduling
+Deploy or update Cockpit automation on Pi 5 (`192.168.4.5:9090`):
+```bash
+./run.sh deploy-automation
+```
+Runs nightly at **02:30 AM** via `ansible-backup-hermes.timer`.
+
+### Disaster Recovery Runbooks
+
+#### Fast Local Rollback (< 2 minutes)
+```bash
+# 1. Stop containers
+ssh shawn@192.168.4.19 'cd /home/shawn/docker/hermes && docker compose down'
+
+# 2. Restore data from latest local snapshot
+ssh shawn@192.168.4.19 '
+  rsync -ah --delete /srv/67e597dd-6061-415d-8a37-2246eabee10a/backups/hermes/latest/ /home/shawn/docker/hermes/data/
+  chmod 755 /home/shawn/docker/hermes/data
+  chown -R shawn:shawn /home/shawn/docker/hermes/data
+'
+
+# 3. Restart and verify
+ssh shawn@192.168.4.19 'cd /home/shawn/docker/hermes && docker compose up -d'
+./run.sh test-hermes
+```
+
+#### Total Host Loss Recovery (from Pi 5 Backup)
+```bash
+# 1. Restore data directory from Pi 5
+ssh shawn@192.168.4.5 '
+  rsync -avz -e "ssh -o StrictHostKeyChecking=accept-new" \
+  /srv/dev-disk-by-uuid-c1c2d4dd-bc6b-4f1f-88dd-e4c8b48d2c3a/hermes_backup/latest/ \
+  shawn@192.168.4.19:/home/shawn/docker/hermes/data/
+'
+
+# 2. Enforce permissions
+ssh shawn@192.168.4.19 'chmod 755 /home/shawn/docker/hermes/data && chown -R 1000:1000 /home/shawn/docker/hermes/data'
+
+# 3. Rebuild and launch Hermes stack
+./run.sh hermes
+./run.sh test-hermes
+```

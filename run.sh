@@ -12,6 +12,7 @@ usage() {
   echo "  ping                 Test SSH connectivity to all servers"
   echo "  backup               Run backup (rpi-clone) on configured servers"
   echo "  backup-data          Run data and Immich sync from 192.168.4.4 to Pi 5"
+  echo "  backup-hermes        Run Hermes agent snapshot and sync (192.168.4.19 -> Pi 5)"
   echo "  upgrade              Run full upgrade pipeline on standard servers"
   echo "  upgrade-ro           Run upgrade on read-only Pi (192.168.4.11 OverlayFS cycle)"
   echo "  upgrade-pikvm        Run upgrade on PiKVM (192.168.4.66 pikvm-update & RO restore)"
@@ -23,6 +24,8 @@ usage() {
   echo "  migrate-var          Migrate /var to Btrfs RAID 1 pool on 192.168.4.18"
   echo "  restart-vlc          Restart persistent VLC video stream (192.168.4.18)"
   echo "  homepage             Deploy and update Homepage dashboard on Pi 5 (192.168.4.5)"
+  echo "  open-webui           Deploy and update Open-WebUI on Fedora (192.168.4.19)"
+  echo "  hermes               Deploy and update Hermes agent stack on Fedora (192.168.4.19)"
   echo "  litellm              Deploy and update LiteLLM AI gateway on Pi 5 (192.168.4.5)"
   echo "  caddy                Deploy and validate Caddy reverse proxy on Pi 5 (192.168.4.5)"
   echo "  shutdown-php         Decommission and shut down WordPress & PHP workloads"
@@ -40,6 +43,7 @@ usage() {
   echo "  $0 ping"
   echo "  $0 backup -K                       # Run block backup (rpi-clone) only"
   echo "  $0 backup-data -K                  # Run data and Immich backup (192.168.4.4 -> Pi 5)"
+  echo "  $0 backup-hermes                   # Run Hermes agent backup (192.168.4.19 -> Pi 5)"
   echo "  $0 cleanup -K                      # Clean disk space across standard servers"
   echo "  $0 cleanup --limit 192.168.4.18 -K # Clean disk space on specific host"
   echo "  $0 check-btrfs                     # Check Btrfs health across all Btrfs servers (.4, .5, .18, .19)"
@@ -116,6 +120,9 @@ case "${CMD}" in
   backup-data)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/backup_data.yml" "$@"
     ;;
+  backup-hermes|hermes-backup)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/backup_hermes.yml" "$@"
+    ;;
   upgrade)
     if [[ " $* " == *" --limit 192.168.4.11"* ]] || [[ " $* " == *" --limit readonly_servers"* ]]; then
       exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/readonly_upgrade.yml" "$@"
@@ -165,6 +172,12 @@ case "${CMD}" in
     ;;
   homepage)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_homepage.yml" "$@"
+    ;;
+  open-webui)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_openwebui.yml" "$@"
+    ;;
+  hermes)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_hermes.yml" "$@"
     ;;
   litellm)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_litellm.yml" "$@"

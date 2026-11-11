@@ -11,7 +11,7 @@ Ansible automation for managing home servers natively (load monitoring, `rpi-clo
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` | Read/Write |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers | Read/Write |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | `glances`, persistent VLC RTSP stream (`snap` vlc) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` | Read/Write |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | None | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (`:9119`/`:8642`/`:6080`), `open-webui` (`:3000`) | Read/Write |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | `pi2beink`, `glances` (`:61208`) | **Read-Only (OverlayFS & Boot Protection)** |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | PiKVM (`kvmd`) | **Read-Only (Native ext4/vfat ro)** |
 | `192.168.64.6` | `shawn` | Debian 13 (UTM VM) | None | `openclaw` (Gateway backed by Mac host Ollama) | Read/Write |
@@ -51,13 +51,19 @@ A wrapper script `./run.sh` is provided so you do not need to activate the virtu
 # 9. Deploy and update Homepage dashboard (192.168.4.5)
 ./run.sh homepage
 
-# 10. Deploy and update LiteLLM AI Gateway (192.168.4.5)
+# 10. Deploy and update Open-WebUI AI chat (192.168.4.19)
+./run.sh open-webui
+
+# 11. Deploy and update Hermes agent stack (192.168.4.19)
+./run.sh hermes
+
+# 12. Deploy and update LiteLLM AI Gateway (192.168.4.5)
 ./run.sh litellm
 
-# 11. Validate and reload Caddy reverse proxy (192.168.4.5)
+# 13. Validate and reload Caddy reverse proxy (192.168.4.5)
 ./run.sh caddy
 
-# 12. Reclaim disk space across standard servers (journal vacuum, docker prune)
+# 14. Reclaim disk space across standard servers (journal vacuum, docker prune)
 ./run.sh cleanup -K
 ```
 

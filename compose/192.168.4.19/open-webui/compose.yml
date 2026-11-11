@@ -1,0 +1,20 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 1536m
+    mem_reservation: 512m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:8080"
+    environment:
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - OPENAI_API_BASE_URLS=http://192.168.4.19:8642/v1;http://192.168.4.5:4000/v1
+      - OPENAI_API_KEYS=${HERMES_API_KEY};${LITELLM_API_KEY}
+      - ENABLE_OLLAMA_API=False
+      - DEFAULT_MODELS=hermes-agent
+    volumes:
+      - /home/shawn/docker/open-webui/data:/app/backend/data

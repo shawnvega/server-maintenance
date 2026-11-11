@@ -15,6 +15,12 @@
         schedule: "*-*-* 02:00:00"
         has_timer: true
 
+      - name: ansible-backup-hermes
+        description: "Ansible Hermes Agent Data Backup (Host 19 -> Host 5)"
+        command: "/home/shawn/server-maintenance/run.sh backup-hermes"
+        schedule: "*-*-* 02:30:00"
+        has_timer: true
+
       - name: ansible-check-btrfs
         description: "Ansible Daily Btrfs Storage Health & Error Audit"
         command: "/home/shawn/server-maintenance/run.sh check-btrfs"
