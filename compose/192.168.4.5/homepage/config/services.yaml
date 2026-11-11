@@ -19,8 +19,17 @@
         icon: caddy.png
         href: http://192.168.4.5
         description: Native Reverse Proxy & TLS (Pi 5)
+    - UniFi:
+        icon: unifi.png
+        href: https://unifi.ui.com/
+        description: Cloud Gateway & Network Console
 
 - Automation & AI:
+    - Open-WebUI:
+        icon: open-webui.png
+        href: http://192.168.4.19:3000
+        description: AI Chat & Hermes Agent Interface (Fedora)
+        ping: 192.168.4.19
     - LiteLLM Proxy:
         icon: litellm.png
         href: http://192.168.4.5:4000
