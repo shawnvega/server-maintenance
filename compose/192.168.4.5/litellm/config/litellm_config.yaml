@@ -93,6 +93,20 @@ model_list:
       mode: audio_transcription
 
   # --- OpenRouter Free Models ---
+  - model_name: openrouter-free
+    litellm_params:
+      model: openrouter/openrouter/free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
   - model_name: gemma4-26b-free
     litellm_params:
       model: openrouter/google/gemma-4-26b-a4b-it:free
@@ -125,6 +139,7 @@ litellm_settings:
 
 router_settings:
   fallbacks:
+    - openrouter-free: ["coding-26b"]
     - gemma4-26b-free: ["coding-26b"]
   allowed_fails: 1
   cooldown_time: 60

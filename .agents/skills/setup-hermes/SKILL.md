@@ -57,11 +57,15 @@ When encountering issues, locate your symptom below for the instant verified fix
   * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring aliases `coding-12b`, `coding-26b` (default), and `coding-31b` for LLM, and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
 
 ### Coding Models Quick Reference & Usage
-| Model Alias | Underlying Ollama Model | Footprint | Best Used For |
+| Model Alias | Underlying Backend | Footprint / Notes | Best Used For |
 |---|---|---|---|
-| `coding-12b` | `gemma4:12b-mlx-code` | ~7.7 GB | Fast interactive edits, simple functions, low resource consumption |
-| `coding-26b` | `gemma4:26b-mlx-code` | ~17 GB | **Default model**: Balanced general-purpose coding agent workflows |
-| `coding-31b` | `gemma4:31b-mlx-code` | ~19 GB | Complex multi-file reasoning, deep refactoring, complex logic |
+| `openrouter-free` | OpenRouter `openrouter/free` | **Default**: Cloud auto-router (`$0`), falls back to `coding-26b` on 429/error | General-purpose agentic & coding tasks with zero local GPU load |
+| `gemma4-26b-free` | OpenRouter `google/gemma-4-26b-a4b-it:free` | Cloud free tier (`$0`), falls back to `coding-26b` on 429/error | Direct Gemma 4 26B free routing (subject to shared pool limits) |
+| `coding-12b` | Mac Ollama `gemma4:12b-mlx-code` | ~7.7 GB | Fast interactive edits, simple functions, low resource consumption |
+| `coding-26b` | Mac Ollama `gemma4:26b-mlx-code` | ~17 GB | **Local fallback**: Balanced general-purpose coding agent workflows |
+| `coding-31b` | Mac Ollama `gemma4:31b-mlx-code` | ~19 GB | Complex multi-file reasoning, deep refactoring, complex logic |
+
+*(OpenRouter API key is stored encrypted as `openrouter_api_key` in `vars/vault.yml` and templated into `~/docker/litellm/.env` via `compose/192.168.4.5/litellm/.env.j2`.)*
 
 #### How to Switch Between Coding Models
 1. **In-Chat Hot-Swapping (Mid-Session)**:
@@ -170,6 +174,9 @@ Ansible manages the synchronization of `compose.yml`, `Dockerfile*`, `config/sup
 ```bash
 # Deploy Hermes stack (Gateway + Desktop)
 ./run.sh hermes
+
+# Bypass the 4.0 loadavg gate when 192.168.4.19 is running a Btrfs rebalance or scrub
+./run.sh hermes -e "load_threshold=20"
 
 # Deploy Open-WebUI stack
 ./run.sh open-webui

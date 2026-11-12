@@ -29,6 +29,8 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 | Web UI model switcher only shows `coding-26b` | Bare `custom` provider probes `/models` without auth (HTTP 401) | [19. Web UI Model Switcher Only Displays Default Model](#19-web-ui-model-switcher-only-displays-default-model-coding-26b) |
 | `[api_server] Refusing to start: API_SERVER_KEY is a placeholder or too short (<16 chars)` | Hermes requires 16+ char API key; `/opt/data/.env` wins over Docker env | [20. Hermes Native OpenAI API Server Key Strength & Precedence](#20-hermes-native-openai-api-server-key-strength--precedence) |
 | Open-WebUI only routes to one backend or fails auth with multiple endpoints | Open-WebUI requires semicolon separation for multi-backend URLs & keys | [21. Open-WebUI Multi-Backend Semicolon Syntax](#21-open-webui-multi-backend-semicolon-syntax) |
+| `litellm_config.yaml` changes don't appear on `/v1/models` after `./run.sh litellm` | `docker compose up -d` skips recreate on bind-mounted config changes | [22. LiteLLM Config-Only Changes Do Not Restart Container](#22-litellm-config-only-changes-do-not-restart-container-on-pi-5) |
+| Ollama Modelfile params fail or `:free` OpenRouter models return 400/429 | `repeat_penalty` -> `repetition_penalty`; `:free` pools rate-limit | [23. Emulating Ollama Modelfile Parameters on OpenRouter](#23-emulating-ollama-modelfile-parameters-on-openrouter-via-litellm) |
 
 ---
 
@@ -503,5 +505,31 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
     - OPENAI_API_KEYS=${HERMES_API_KEY};${LITELLM_API_KEY}
     - DEFAULT_MODELS=hermes-agent
   ```
+
+---
+
+### 22. LiteLLM Config-Only Changes Do Not Restart Container on Pi 5
+* **The Symptom**:
+  After editing `compose/192.168.4.5/litellm/config/litellm_config.yaml` and running `./run.sh litellm`, `GET http://192.168.4.5:4000/v1/models` still returns the previous model list.
+* **Root Cause**:
+  `tasks/restart_docker_stack.yml` runs `docker compose up -d`, which only recreates the `litellm` container when `docker-compose.yml` or `.env` changes—not when a bind-mounted config file (`./config/litellm_config.yaml:/app/config.yaml:ro`) is updated. On Pi 5, `litellm` also takes ~35–40 seconds after restart to finish Python/uvicorn cold-boot before port `4000` accepts connections.
+* **The Fix**:
+  Restart the container explicitly after syncing config-only changes, then wait ~35–40s before probing `/v1/models`:
+  ```bash
+  ./run.sh litellm && ssh shawn@192.168.4.5 "docker restart litellm"
+  ```
+
+---
+
+### 23. Emulating Ollama Modelfile Parameters on OpenRouter via LiteLLM
+* **The Symptom**:
+  Copying local Ollama `Modelfile` parameters (`repeat_penalty`, `repeat_last_n`) directly to OpenRouter fails or is ignored, or `:free` upstream providers return HTTP 400 (unsupported parameter) or HTTP 429 (`upstream_provider_shared_pool` rate limit).
+* **Root Cause**:
+  1. Ollama's `repeat_penalty` maps to OpenRouter's `repetition_penalty`; `repeat_last_n` is Ollama/llama.cpp-only and unsupported on OpenRouter.
+  2. Free-tier OpenRouter routes (`openrouter/free`, `google/gemma-4-26b-a4b-it:free`) dispatch to varying upstream providers with different parameter support and shared rate-limit pools.
+* **The Fix**:
+  1. Map `temperature: 0.0`, `top_p: 0.95`, `repetition_penalty: 1.05`, and `stop: ["</tool_call>", "<|im_end|>"]` in `litellm_params`.
+  2. Set `litellm_settings.drop_params: true` so LiteLLM strips any parameter rejected by an upstream provider instead of failing with HTTP 400.
+  3. Configure `router_settings.fallbacks` (e.g. `openrouter-free: ["coding-26b"]`) so `429` rate limits or upstream errors fall back seamlessly to local Mac Ollama.
 
 

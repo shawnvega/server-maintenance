@@ -1,5 +1,5 @@
 model:
-  default: {{ hermes_model_name | default('gemma4-26b-free') }}
+  default: {{ hermes_model_name | default('openrouter-free') }}
   provider: litellm
   base_url: http://192.168.4.5:4000/v1
   api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
@@ -10,6 +10,7 @@ providers:
     base_url: http://192.168.4.5:4000/v1
     api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
     models:
+      - openrouter-free
       - gemma4-26b-free
       - coding-12b
       - coding-26b
