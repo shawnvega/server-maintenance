@@ -9,7 +9,7 @@ This document details Btrfs filesystem architecture across the homelab cluster, 
 | Host | Group | Filesystems / Pools | Storage Role |
 |---|---|---|---|
 | `192.168.4.4` | `btrfs_storage_servers`, `btrfs_servers` | Mounted data pools | Immich photo storage, Syncthing synchronization, block backups |
-| `192.168.4.5` | `btrfs_storage_servers`, `btrfs_servers` | `hdds`, `ssds` pools | Primary storage hub, Immich backup target, Semaphore database |
+| `192.168.4.5` | `btrfs_storage_servers`, `btrfs_servers` | `hdds`, `ssds` pools | Primary storage hub, Immich & Hermes backup target |
 | `192.168.4.18` | `btrfs_servers` | `/var` (3-device RAID 1) | Replaces limited eMMC with mirrored storage across 3 flash devices |
 | `192.168.4.19` | `btrfs_servers` | Root `/` (Fedora) | Default Fedora Btrfs root filesystem with subvolumes (`root`, `home`) |
 
@@ -56,7 +56,7 @@ Btrfs scrub reads all data and metadata across disks, verifies checksums, and au
   ./run.sh scrub-btrfs -e scrub_target=hdds
   ./run.sh scrub-btrfs -e scrub_target=ssds
   ```
-* **Single-Host Dedicated Playbooks** (designed for 1-click execution in Semaphore UI):
+* **Single-Host Dedicated Playbooks** (for targeted single-host runs):
   * `btrfs_scrub_4.yml`: Targets `192.168.4.4` (`./run.sh scrub-btrfs --limit 192.168.4.4`)
   * `btrfs_scrub_5.yml`: Targets `192.168.4.5`
   * `btrfs_scrub_18.yml`: Targets `192.168.4.18` (`/var` RAID 1)

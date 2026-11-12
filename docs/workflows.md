@@ -1,6 +1,6 @@
 # Specialized Workflows, Services & Maintenance
 
-This document covers operational workflows for the reverse proxy, Semaphore runner safety, backup synchronization, credential rotation, secret management, service cleanup, and executing commands inside Docker containers.
+This document covers operational workflows for the Caddy reverse proxy, Cockpit systemd automation, backup synchronization, credential rotation, Ansible Vault secret management, disk cleanup, executing commands inside Docker containers, and host Wayland VNC.
 
 ---
 
@@ -73,7 +73,7 @@ ssh shawn@192.168.4.5 'journalctl -u ansible-backup-data.service -f'
 Backs up user data shares, external drive pools, and Immich media/database from `192.168.4.4` to the Pi 5 (`192.168.4.5`) storage pool:
 * Handles automated database dumps for Immich Postgres.
 * Synchronizes photo library using checksum-verified `rsync`.
-* Fully compatible with unattended Semaphore UI scheduled task templates.
+* Scheduled nightly at `02:00` via `ansible-backup-data.timer` on Host 5.
 
 ```bash
 ./run.sh backup-data -K
@@ -124,7 +124,7 @@ To rekey the vault with a new password:
    .venv/bin/ansible-vault view vars/vault.yml --vault-password-file .vault_pass
    ```
 
-### Overriding Service Credentials (e.g. Hermes, Semaphore)
+### Overriding Service Credentials (e.g. Hermes)
 Default credentials defined in `.env.j2` templates can be overridden and stored securely in `vars/vault.yml`:
 
 1. Edit vault:
@@ -136,20 +136,11 @@ Default credentials defined in `.env.j2` templates can be overridden and stored 
    # Hermes web dashboard credentials
    hermes_dashboard_username: "admin"
    hermes_dashboard_password: "your_secure_hermes_password"
-
-   # Semaphore UI admin password
-   semaphore_admin_password: "your_secure_semaphore_password"
    ```
 3. Deploy the updated stack:
-   * **For Hermes (`192.168.4.19`)**:
-     ```bash
-     ./run.sh upgrade --tags docker --limit 192.168.4.19
-     ```
-   * **For Semaphore (`192.168.4.5`)**:
-     ```bash
-     ./run.sh upgrade --tags docker --limit 192.168.4.5
-     ```
-     *(Ansible will re-render `.env` and automatically run `semaphore users change-by-login` to sync the running database password)*
+   ```bash
+   ./run.sh upgrade --tags docker --limit 192.168.4.19
+   ```
 
 ---
 
@@ -248,62 +239,7 @@ ssh -t shawn@192.168.4.4 'docker exec -it -u postgres immich_postgres psql -U po
 
 ---
 
-## 9. Homepage Homelab Dashboard (`192.168.4.5`)
-
-The cluster runs a centralized **Homepage** dashboard container on `192.168.4.5` providing one-click access, status indicators, and live metrics for all homelab services.
-
-* **Access Endpoints**:
-  * Clean LAN URL: `http://192.168.4.5` (routed automatically via native Caddy on port 80).
-  * Direct Container Port: `http://192.168.4.5:3001`
-* **Configuration Files** (`compose/192.168.4.5/homepage/config/`):
-  * `settings.yaml`: Title, layout categories (Core Infrastructure, Automation & AI, Media & Storage, Monitoring), theme, and search provider.
-  * `services.yaml`: Service tiles, icons, URLs, container mapping, ping checks, and widgets (`glances` with `metric: cpu`). Includes OpenMediaVault (`192.168.4.4`), Cockpit (`192.168.4.19:9090`), all 5 Glances nodes (`.5`, `.4`, `.19`, `.18`, `.11`), and Frigate NVR (`https://192.168.4.19:8971`).
-  * `widgets.yaml`: Header resources (Pi 5 CPU, memory, disk, and CPU temperature).
-  * `bookmarks.yaml`: Quick link bookmarks.
-  * `docker.yaml`: Local Docker socket configuration for live container status.
-* **Deployment & Verification**:
-  * Execute `./run.sh homepage` to sync static compose and config files to `~/docker/homepage` and recreate the container.
-  * Playbook: `deploy_homepage.yml` (included in `docker_stacks` on `192.168.4.5`).
-
----
-
-## 10. MLX Whisper Voice Dictation & STT Setup
-
-The cluster utilizes local Apple Silicon Metal acceleration on the host Mac (`192.168.4.8`) to power low-latency speech-to-text dictation for client agents (such as Hermes on `192.168.4.19`).
-
-* **One-Click Provisioning**:
-  ```bash
-  ./run.sh setup-whisper
-  ```
-  Runs `scripts/setup_mlx_whisper.sh` to configure the `com.mlx.whisper` LaunchAgent on port 8080, route transcription requests through LiteLLM on port 4000, and execute a local self-test.
-* **Hermes Integration**:
-  Hermes Gateway delegates STT requests to `http://192.168.4.5:4000/v1` using bearer authentication, keeping CPU load off the dual-core Fedora node.
-* **Verification**:
-  Execute `./run.sh test-hermes` to verify the complete LLM and STT pipeline.
-* **Documentation**:
-  Refer to [.agents/skills/mlx-whisper/SKILL.md](../.agents/skills/mlx-whisper/SKILL.md) for architecture, configuration schemas, and troubleshooting.
-
----
-
-## 11. LiteLLM AI Gateway & Routing (Pi 5)
-
-The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.5:4000` acting as an authenticated 24/7 gateway and fallback router.
-
-* **Deployment & Updates**:
-  ```bash
-  ./run.sh litellm
-  ```
-  Deploys and recreates `compose/192.168.4.5/litellm` using `deploy_litellm.yml`.
-* **Routing**:
-  * Chat Completions (`coding-12b`, `coding-26b`, `coding-31b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`) with 128k context bounds.
-  * Speech-to-Text (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
-  * Fallbacks: Configurable in `compose/192.168.4.5/litellm/config/litellm_config.yaml` to seamlessly redirect to cloud APIs (Gemini, Groq, OpenAI) when the Mac is offline.
-* **Mac Firewall Security**:
-  Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
-
----
-
-## 12. Host Wayland VNC, noVNC & Display Scaling (`192.168.4.19`)
+## 9. Host Wayland VNC, noVNC & Display Scaling (`192.168.4.19`)
 
 Host `192.168.4.19` runs a native **Wayland VNC server (`wayvnc`)** on port `5900` and **noVNC (`websockify`)** on port `6080` mirroring the physical **`labwc`** (`lxqt-wayland`) desktop—while the optional `hermes-desktop` sandbox container uses port `6081` (`desktop` profile).
 

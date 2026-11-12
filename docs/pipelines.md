@@ -34,7 +34,7 @@ The master playbook executes across all 6 cluster nodes concurrently using Ansib
 
 ## 2. Standard Servers Pipeline (`upgrade.yml`)
 
-Designed for regular maintenance of standard read/write servers (`192.168.4.4`, `192.168.4.5`, `192.168.4.18`, `192.168.4.19`). When run inside Semaphore, it safely skips `192.168.4.5` (see [workflows.md](workflows.md)).
+Designed for regular maintenance of standard read/write servers (`192.168.4.4`, `192.168.4.5`, `192.168.4.18`, `192.168.4.19`).
 
 ### Pipeline Stages
 

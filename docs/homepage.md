@@ -8,14 +8,19 @@ This document details the configuration, Caddy reverse proxy integration, widget
 
 * **Host Machine (`192.168.4.5`)**:
   * OS: Debian GNU/Linux 12 (bookworm) / Raspberry Pi OS aarch64.
-  * Direct Container Port: `3001` (mapped as `3001:3000` to avoid conflicts with Semaphore UI on port 3000).
+  * Direct Container Port: `3001` (mapped as `3001:3000`).
 * **Reverse Proxy Ingress**:
   * Clean URL: `http://192.168.4.5` (port 80).
   * Native Caddy reverse proxy terminates port 80 and reverse proxies upstream to `127.0.0.1:3001`.
 * **Repository & Host Paths**:
   * Git Source: `compose/192.168.4.5/homepage/`
   * Host Runtime: `/home/shawn/docker/homepage/`
-  * Configuration: `/home/shawn/docker/homepage/config/`
+  * Configuration (`compose/192.168.4.5/homepage/config/` -> `/home/shawn/docker/homepage/config/`):
+    * `settings.yaml`: Title, layout categories (Core Infrastructure, Automation & AI, Media & Storage, Monitoring), theme, and search provider.
+    * `services.yaml`: Service tiles, icons, URLs, container mapping, ping checks, and Glances widgets (`metric: cpu`).
+    * `widgets.yaml`: Header resources (Pi 5 CPU, memory, disk, and CPU temperature).
+    * `bookmarks.yaml`: Quick link bookmarks.
+    * `docker.yaml`: Local Docker socket configuration for live container status.
 * **Docker Socket Integration**:
   * Volume Mount: `/var/run/docker.sock:/var/run/docker.sock:ro`
   * Security Context: `PUID=1000`, `PGID=990` (`docker` group GID on Pi OS).

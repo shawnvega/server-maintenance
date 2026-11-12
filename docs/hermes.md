@@ -63,6 +63,20 @@ If Hermes displays `coding 26b │ ... / 256k` despite configuring Ollama with `
 * Ensure explicit `model_info` (`max_input_tokens: 131072`, `max_output_tokens: 8192`) is defined in `compose/192.168.4.5/litellm/config/litellm_config.yaml`.
 * Redeploy LiteLLM with `./run.sh litellm` and restart `hermes-gateway`.
 
+### LiteLLM AI Gateway (`192.168.4.5:4000`)
+The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.5:4000` acting as an authenticated 24/7 gateway and fallback router:
+* **Deploy & Update**: `./run.sh litellm` (deploys `compose/192.168.4.5/litellm` via `deploy_litellm.yml`).
+* **Routing**:
+  * **Chat Completions** (`coding-12b`, `coding-26b`, `coding-31b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`) with 128k context bounds.
+  * **Speech-to-Text** (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
+  * **Cloud Fallbacks**: Configurable in `compose/192.168.4.5/litellm/config/litellm_config.yaml` to redirect to cloud APIs (Gemini, Groq, OpenAI) when the Mac is offline.
+* **Mac Firewall**: Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by the macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
+
+### MLX Whisper Voice Dictation & STT (`192.168.4.8:8080`)
+Local Apple Silicon Metal acceleration on the host Mac (`192.168.4.8`) powers low-latency speech-to-text dictation for Hermes on `192.168.4.19`:
+* **Provisioning**: `./run.sh setup-whisper` runs `scripts/setup_mlx_whisper.sh` to configure the `com.mlx.whisper` LaunchAgent on port `8080`, route transcription through LiteLLM on port `4000`, and run a local self-test.
+* **Documentation**: See [.agents/skills/mlx-whisper/SKILL.md](../.agents/skills/mlx-whisper/SKILL.md) for schemas and troubleshooting.
+
 ---
 
 ## 4. Troubleshooting & Diagnostics Runbooks
