@@ -244,6 +244,7 @@ ssh -t shawn@192.168.4.4 'docker exec -it -u postgres immich_postgres psql -U po
 Host `192.168.4.19` runs a native **Wayland VNC server (`wayvnc`)** on port `5900` and **noVNC (`websockify`)** on port `6080` mirroring the physical **`labwc`** (`lxqt-wayland`) desktop—while the optional `hermes-desktop` sandbox container uses port `6081` (`desktop` profile).
 
 * **Permanent Display Scaling**: `~/.config/lxqt/labwc/autostart` runs `wlr-randr --output eDP-1 --scale 2`, giving `eDP-1` (`3000x2000@60.0`) a permanent `1500x1000` logical resolution whether or not VNC is connected.
+* **Idle Display Power-Off**: `~/.config/lxqt/labwc/autostart` also launches `swayidle` (5-minute timeout via `screen_idle_timeout_sec: 300`) using `wlopm --off "*"` / `wlopm --on "*"` to turn off the physical panel when idle and wake it on local or VNC input.
 * **SDDM Autologin**: `/etc/sddm.conf.d/autologin.conf` automatically logs `shawn` into `lxqt-wayland.desktop` on boot so `wayvnc.service` and `novnc.service` (`systemctl --user status wayvnc novnc`) start immediately.
 * **Firewall & Client Access**: `firewalld` permits `5900/tcp` and `6080/tcp` only from `192.168.4.0/24`.
   * **Browser (`noVNC`)**: `https://192.168.4.19:6080/` (TLS/WSS with self-signed cert so browser WebCrypto supports `wayvnc` RSA-AES auth; login as `shawn` + VNC password).

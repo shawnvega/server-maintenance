@@ -9,6 +9,7 @@
     novnc_port: 6080
     vnc_lan_cidr: "192.168.4.0/24"
     enable_sddm_autologin: true
+    screen_idle_timeout_sec: 300
 
   vars_prompt:
     - name: vnc_password
@@ -30,7 +31,7 @@
         state: directory
         mode: "0700"
 
-    - name: Install labwc, wlr-randr, wayvnc, novnc, and websockify
+    - name: Install labwc, wlr-randr, wayvnc, novnc, websockify, swayidle, and wlopm
       become: true
       ansible.builtin.dnf:
         name:
@@ -40,6 +41,8 @@
           - novnc
           - python3-websockify
           - openssl
+          - swayidle
+          - wlopm
         state: present
 
     - name: Ensure noVNC index.html points to vnc.html
@@ -86,7 +89,7 @@
         mode: "0644"
       notify: Restart sddm
 
-    - name: Configure labwc autostart for 1500x1000 scaling (scale 2) and systemd env
+    - name: Configure labwc autostart for 1500x1000 scaling (scale 2), swayidle, and systemd env
       ansible.builtin.copy:
         dest: "/home/{{ vnc_user }}/.config/lxqt/labwc/autostart"
         owner: "{{ vnc_user }}"
@@ -95,6 +98,8 @@
         content: |
           dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP >/dev/null 2>&1 &
           wlr-randr --output eDP-1 --scale 2 >/dev/null 2>&1 &
+          pkill -x swayidle >/dev/null 2>&1 || true
+          swayidle -w timeout {{ screen_idle_timeout_sec }} 'wlopm --off "*"' resume 'wlopm --on "*"' >/dev/null 2>&1 &
       notify: Restart sddm
 
     - name: Generate RSA key for wayvnc RSA-AES auth
