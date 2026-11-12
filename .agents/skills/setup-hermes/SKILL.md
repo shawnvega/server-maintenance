@@ -54,7 +54,7 @@ When encountering issues, locate your symptom below for the instant verified fix
 * **LLM & Audio STT Provider**:
   * Engine (Host Mac at `192.168.4.8`): Local Ollama serving 3 local coding models (`gemma4:12b-mlx-code`, `gemma4:26b-mlx-code`, `gemma4:31b-mlx-code` on port `11434`) + local MLX Whisper (`:8080`), protected by macOS PF firewall whitelist.
   * Central Proxy (Pi 5 at `192.168.4.5:4000`): Dockerized LiteLLM proxy with Bearer token authentication (`sk-hermes-mac-secret`), managed via `compose/192.168.4.5/litellm` and `./run.sh litellm`.
-  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring aliases `coding-12b`, `coding-26b` (default), and `coding-31b` for LLM, and `whisper` for `audio_transcription`. See [.agents/skills/mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
+  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring aliases `openrouter-free` (default), `gemma4-26b-free`, `coding-12b`, `coding-26b` (local fallback), and `coding-31b` for LLM, plus `whisper` for `audio_transcription`. See [mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
 
 ### Coding Models Quick Reference & Usage
 | Model Alias | Underlying Backend | Footprint / Notes | Best Used For |
@@ -95,76 +95,25 @@ When encountering issues, locate your symptom below for the instant verified fix
 
 ### Step 1: Manage LiteLLM Proxy on Pi 5
 
-LiteLLM runs as a Docker container on Raspberry Pi 5 (`192.168.4.5:4000`).
+LiteLLM runs as a Docker container on Raspberry Pi 5 (`192.168.4.5:4000`), routing requests to OpenRouter (cloud free tier) and local Ollama (`192.168.4.8:11434`) / MLX Whisper (`192.168.4.8:8080`) on the host Mac.
 
 #### Deploy or Restart LiteLLM
 ```bash
 ./run.sh litellm
 ```
 
-Verify models from terminal:
+Verify models from terminal (never use `/health`; probe `/v1/models`):
 ```bash
 curl -s -H "Authorization: Bearer sk-hermes-mac-secret" http://192.168.4.5:4000/v1/models
 ```
-        <string>/Users/shawn/.local/bin/litellm</string>
-        <string>--config</string>
-        <string>/Users/shawn/StudioProjects/server-maintenance/files/litellm_mac_config.yaml</string>
-        <string>--host</string>
-        <string>0.0.0.0</string>
-        <string>--port</string>
-        <string>4000</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/Users/shawn/Library/Logs/litellm.log</string>
-    <key>StandardErrorPath</key>
-    <string>/Users/shawn/Library/Logs/litellm.error.log</string>
-</dict>
-</plist>
-EOF
 
-# 4. Bootstrap and start the service
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.litellm.proxy.plist
-```
-
-#### B. Lifecycle & Inspection Commands
+#### Host Mac Ollama Network Isolation (macOS PF)
+If restricting Ollama (`11434`) or Whisper (`8080`) on the host Mac, use macOS Packet Filter anchors (`/etc/pf.anchors/`):
 ```bash
-# Inspect status & PID
-launchctl print gui/$(id -u)/com.litellm.proxy
-
-# Stop service
-launchctl bootout gui/$(id -u)/com.litellm.proxy
-
-# Start / Reload service
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.litellm.proxy.plist
-
-# Inspect logs
-tail -n 30 ~/Library/Logs/litellm.log
-tail -n 30 ~/Library/Logs/litellm.error.log
+sudo pfctl -vnf /etc/pf.anchors/<anchor>.rules
+sudo pfctl -a <anchor> -f /etc/pf.anchors/<anchor>.rules
+sudo pfctl -a <anchor> -sr
 ```
-
-#### C. Network Isolation via macOS Packet Filter (PF)
-To restrict incoming traffic on port 4000 exclusively to localhost and the Fedora host (`192.168.4.19`):
-1. Create `/etc/pf.anchors/litellm.rules`:
-   ```text
-   # Block external LAN access to LiteLLM port 4000 by default
-   block in proto tcp to any port 4000
-
-   # Allow local Mac loopback
-   pass in quick proto tcp from 127.0.0.1 to any port 4000
-
-   # Allow Fedora host running Hermes
-   pass in quick proto tcp from 192.168.4.19 to any port 4000
-   ```
-2. Test and load anchor:
-   ```bash
-   sudo pfctl -vnf /etc/pf.anchors/litellm.rules
-   sudo pfctl -a litellm -f /etc/pf.anchors/litellm.rules
-   sudo pfctl -a litellm -sr
-   ```
 
 ---
 

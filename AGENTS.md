@@ -62,6 +62,17 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 | **Workflows, Caddy & Vault** | [docs/workflows.md](docs/workflows.md) | Native Caddy reload, Cockpit systemd automation, Immich sync, password update, Vault rekey |
 | **Troubleshooting & Recovery** | [docs/troubleshooting.md](docs/troubleshooting.md) | Quick incident triage matrix, instant CLI recovery commands, links to deep guides |
 
+### Workspace Skills Router (`.agents/skills/`)
+
+| Skill | Scope | References / Scripts |
+|---|---|---|
+| [`server-management`](.agents/skills/server-management/SKILL.md) | Ansible upgrades, `rpi-clone`, Btrfs scrubs, RO Pi / PiKVM, Cockpit automation | Links to `docs/` |
+| [`setup-hermes`](.agents/skills/setup-hermes/SKILL.md) | Hermes Gateway & Desktop (`.19`), Open-WebUI, LiteLLM (`.5`) | `references/gotchas.md`, `references/ecosystem-research.md`, `scripts/verify_hermes.sh` |
+| [`setup-homepage`](.agents/skills/setup-homepage/SKILL.md) | Homepage dashboard & Caddy reverse proxy (`.5`) | `references/gotchas.md`, `scripts/verify_homepage.sh` |
+| [`openclaw-setup`](.agents/skills/openclaw-setup/SKILL.md) | OpenClaw UTM VMs (`.64.6`, `.64.9`), host Mac Ollama & PF firewall | `references/config-and-context.md`, `references/troubleshooting.md`, `references/whisper-cpp.md` |
+| [`mlx-whisper`](.agents/skills/mlx-whisper/SKILL.md) | Apple Silicon MLX Whisper STT daemon (`.8:8080`) & LiteLLM audio routes | — |
+| [`termux-hermes`](.agents/skills/termux-hermes/SKILL.md) | Pixel 5 Termux `proot-distro` Hermes & `faster-whisper` (`.55`) | — |
+
 ---
 
 ## Essential Command Cheatsheet

@@ -26,7 +26,7 @@ When encountering issues with the dashboard, locate the symptom below for the in
 | Quicklinks crash: `TypeError: Failed to construct 'URL': Invalid URL` | Separate dashed lines in `bookmarks.yaml` split properties into separate list items without `href` | Group all properties under a single dictionary item with `abbr:`, `href:`, and `icon:` |
 | Container logs report `EACCES /var/run/docker.sock` | Container node process lacks host `docker` group membership (host GID 990) | Set `PGID=990` in `compose/192.168.4.5/homepage/docker-compose.yml` |
 | Glances metrics empty or failing | Glances v4 API path changes | Add `version: 4` to widget definitions in `services.yaml` |
-| Port `:3000` conflict on Pi 5 | Semaphore UI already binds port 3000 | Map Homepage host port to `3001:3000` in `docker-compose.yml` |
+| Port `:3000` conflict / standard port | Homepage is mapped to `:3001:3000` to keep `:3000` free | Map Homepage host port to `3001:3000` in `docker-compose.yml` and access via Caddy (`:80`) |
 
 ---
 
@@ -35,7 +35,7 @@ When encountering issues with the dashboard, locate the symptom below for the in
 * **Host Machine (`192.168.4.5`)**:
   * OS: Debian GNU/Linux 12 (bookworm) / Raspberry Pi OS aarch64.
   * Hardware: Raspberry Pi 5 Model B (4 cores), 8GB RAM.
-  * Co-located workloads: Semaphore UI (`:3000`), Immich ML (`:3003`), Glances (`:61208`), and native Caddy reverse proxy (`:80`, `:443`).
+  * Co-located workloads: Cockpit (`:9090` with systemd automation timers), Immich ML (`:3003`), LiteLLM (`:4000`), Glances (`:61208`), and native Caddy reverse proxy (`:80`, `:443`).
 * **Ingress & Networking**:
   * **Direct Port**: `http://192.168.4.5:3001`
   * **Caddy Reverse Proxy**: Clean URL `http://192.168.4.5` (port 80). Caddy terminates standard HTTP and proxies to `127.0.0.1:3001` without SSL redirect issues on LAN.
@@ -84,12 +84,11 @@ Declares service tiles, grouping, container health tracking, and metrics:
 ```yaml
 ---
 - Core Infrastructure:
-    - Semaphore:
-        icon: semaphore.png
-        href: http://192.168.4.5:3000
-        description: Ansible Automation Controller (Pi 5)
-        server: local-docker
-        container: semaphore
+    - Cockpit (Pi 5):
+        icon: cockpit.png
+        href: https://192.168.4.5:9090
+        description: Pi 5 Systemd Automation & Admin Console
+        ping: 192.168.4.5
     - PiKVM:
         icon: pikvm.png
         href: https://192.168.4.66
@@ -234,3 +233,13 @@ Run the integrated test script to verify HTTP status codes, reverse proxy forwar
 3. **Keep `PGID=990`**: Do not revert `PGID` to 1000; node needs GID 990 to communicate with `/var/run/docker.sock`.
 4. **Maintain `HOMEPAGE_ALLOWED_HOSTS`**: When introducing new local domain names (e.g. `*.home.arpa`), append them to `HOMEPAGE_ALLOWED_HOSTS` in `docker-compose.yml`.
 5. **Run Syntax Checks**: Always run `.venv/bin/ansible-playbook deploy_homepage.yml --syntax-check` before committing playbook updates.
+
+---
+
+## 5. Documentation Router
+
+| Document | Topics Covered |
+|---|---|
+| [references/gotchas.md](references/gotchas.md) | Next.js host header protection, Glances v4 regex, bookmark YAML, Docker socket GID |
+| [docs/homepage.md](../../../docs/homepage.md) | Dashboard architecture, Caddy reverse proxy, Glances widgets |
+| [docs/workflows.md](../../../docs/workflows.md) | Native Caddy reload & Cockpit systemd automation |

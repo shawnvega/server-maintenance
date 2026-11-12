@@ -12,6 +12,17 @@ Guide for operating the non-Docker **Hermes Agent** and local **`faster-whisper`
 
 ---
 
+## Quick Triage Decision Matrix
+
+| Symptom / Error | Root Cause | Instant Resolution |
+|---|---|---|
+| `sv: warning: ... unable to open supervise/ok` over SSH | `$SVDIR` / `$LOGDIR` only exported in login shells | Wrap SSH commands in `bash -lc "sv status ..."` |
+| `sv restart` hangs (`timeout: run: ... got TERM`) | `proot` ignores `SIGTERM` during 7s grace window | Use `sv force-restart <service>` or `sv force-stop <service>` |
+| `open() got an unexpected keyword argument 'metadata_errors'` | `faster-whisper==1.2.1` incompatible with PyAV `19.x` | Pin `av>=13,<16` inside isolated `/opt/faster-whisper` venv |
+| Services not running after Android reboot | Termux services start on Termux launch, not Android boot | Open Termux once (or install `Termux:Boot` in `~/.termux/boot/`) |
+
+---
+
 ## 1. Host & Architecture Quick Reference
 
 * **Host**: Android (`aarch64` Qualcomm Kryo-4XX, ~7.3 GiB RAM), native Termux (`u0_a287`).
@@ -80,3 +91,12 @@ ssh -p 8022 shawn@192.168.4.55 'curl -fsS http://127.0.0.1:8081/health && echo "
 # Inspect recent logs
 ssh -p 8022 shawn@192.168.4.55 'tail -n 30 $PREFIX/var/log/sv/faster-whisper/current $PREFIX/var/log/sv/hermes-dashboard/current'
 ```
+
+---
+
+## 5. Documentation Router
+
+| Document | Topics Covered |
+|---|---|
+| [setup-hermes/SKILL.md](../setup-hermes/SKILL.md) | Dockerized Hermes Gateway & LiteLLM stack on `.19` / `.5` |
+| [mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md) | Apple Silicon MLX Whisper LAN STT (`192.168.4.5:4000`) |

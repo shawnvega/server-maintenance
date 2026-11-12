@@ -42,7 +42,7 @@ This automated provisioning script ([`scripts/setup_mlx_whisper.sh`](file:///Use
 3. Verifies `ffmpeg` in `/opt/homebrew/bin/ffmpeg`.
 4. Writes and installs `~/Library/LaunchAgents/com.mlx.whisper.plist`.
 5. Starts/reloads the LaunchAgent and verifies `GET http://127.0.0.1:8080/health`.
-6. Updates [`files/litellm_mac_config.yaml`](file:///Users/shawn/StudioProjects/server-maintenance/files/litellm_mac_config.yaml) to declare `model_name: whisper` and reloads LiteLLM.
+6. Updates the legacy Mac config [`files/litellm_mac_config.yaml`](../../../files/litellm_mac_config.yaml) with `model_name: whisper` (note: live LiteLLM now runs on Pi 5 via [`compose/192.168.4.5/litellm/config/litellm_config.yaml`](../../../compose/192.168.4.5/litellm/config/litellm_config.yaml) and `./run.sh litellm`).
 7. Executes a live self-test transcription.
 
 ---
@@ -190,9 +190,9 @@ Run the integrated Hermes verification test:
 *(Check #11 verifies the MLX Whisper health endpoint, LiteLLM model catalog, and Hermes STT configuration).*
 
 ### B. Direct Audio Transcription Probe
-Test transcription through LiteLLM from the command line:
+Test transcription through LiteLLM on Pi 5 (`192.168.4.5:4000`) from the command line:
 ```bash
-curl -s -X POST http://192.168.4.8:4000/v1/audio/transcriptions \
+curl -s -X POST http://192.168.4.5:4000/v1/audio/transcriptions \
   -H "Authorization: Bearer sk-hermes-mac-secret" \
   -F "file=@/path/to/audio.wav" \
   -F "model=whisper"
@@ -208,3 +208,13 @@ curl -s -X POST http://192.168.4.8:4000/v1/audio/transcriptions \
 | `[Errno 2] No such file or directory: 'ffmpeg'` | launchd environment lacks `/opt/homebrew/bin` | Ensure `PATH` in `com.mlx.whisper.plist` and `os.environ["PATH"]` in `mlx_whisper_server.py` prepend `/opt/homebrew/bin`. |
 | Silent audio returns `{"transcript": ""}` | Hermes anti-hallucination filter removes default "Thank you" | Expected behavior: Whisper frequently outputs "Thank you" on pure silence; Hermes Silero VAD / hallucination filter cleans it. |
 | LiteLLM returns `401 Unauthorized` | Missing or mismatched Bearer token | Pass `-H "Authorization: Bearer sk-hermes-mac-secret"` matching `master_key`. |
+
+---
+
+## 7. Documentation Router
+
+| Document | Topics Covered |
+|---|---|
+| [setup-hermes/SKILL.md](../setup-hermes/SKILL.md) | Hermes Gateway & LiteLLM deployment on `.19` and `.5` |
+| [termux-hermes/SKILL.md](../termux-hermes/SKILL.md) | Local `faster-whisper` vs. LAN MLX Whisper on Pixel 5 (`.55`) |
+| [docs/hermes.md](../../../docs/hermes.md) | Full Hermes architecture & STT integration |
