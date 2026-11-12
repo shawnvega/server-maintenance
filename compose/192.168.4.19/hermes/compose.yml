@@ -49,6 +49,7 @@ services:
       dockerfile: Dockerfile
     image: hermes-desktop:minimal
     container_name: hermes-desktop
+    profiles: ["desktop"]
     restart: unless-stopped
     shm_size: "1gb"
     mem_limit: 1536m
@@ -57,7 +58,7 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "6080:6080"
+      - "6081:6080"
     environment:
       - DISPLAY=:1
       - HOME=/home/hermes

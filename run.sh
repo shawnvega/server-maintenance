@@ -33,8 +33,10 @@ usage() {
   echo "  deploy-host5         Deploy standalone upgrade script to Host 5 (192.168.4.5)"
   echo "  upgrade-host5        Trigger detached standalone maintenance on Host 5 (192.168.4.5)"
   echo "  deploy-automation    Deploy Cockpit systemd services & timers to Pi 5 (192.168.4.5)"
+  echo "  setup-vnc            Install & configure Wayland VNC (wayvnc) & 1500x1000 scaling (192.168.4.19)"
   echo "  setup-whisper        Install & configure local Apple Silicon MLX Whisper & LiteLLM"
   echo "  test-hermes          Verify Hermes Gateway, Desktop, TUI grant & LiteLLM connectivity"
+  echo "  hermes-shell         Open an interactive terminal inside Hermes container (192.168.4.19)"
   echo "  change-password      Change login password on all servers and PiKVM admin"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
@@ -90,6 +92,9 @@ case "${CMD}" in
     ;;
   test-hermes|verify-hermes)
     exec "${SCRIPT_DIR}/.agents/skills/setup-hermes/scripts/verify_hermes.sh" "$@"
+    ;;
+  hermes-shell|shell-hermes)
+    exec "${SCRIPT_DIR}/scripts/hermes_shell.sh" "$@"
     ;;
 esac
 
@@ -199,6 +204,9 @@ case "${CMD}" in
     ;;
   deploy-automation|cockpit-automation)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/deploy_cockpit_automation.yml" "$@"
+    ;;
+  setup-vnc|vnc)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/setup_vnc.yml" "$@"
     ;;
   setup-whisper|install-whisper)
     exec "${SCRIPT_DIR}/scripts/setup_mlx_whisper.sh" "$@"

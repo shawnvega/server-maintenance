@@ -1,0 +1,326 @@
+---
+- name: Configure permanent 1500x1000 scaling, labwc, wayvnc, and noVNC (:6080) on 192.168.4.19
+  hosts: 192.168.4.19
+  gather_facts: true
+
+  vars:
+    vnc_user: shawn
+    vnc_port: 5900
+    novnc_port: 6080
+    vnc_lan_cidr: "192.168.4.0/24"
+    enable_sddm_autologin: true
+
+  vars_prompt:
+    - name: vnc_password
+      prompt: "Enter VNC password for {{ vnc_user }} on :{{ vnc_port }} / :{{ novnc_port }}"
+      private: true
+
+  tasks:
+    - name: Validate that VNC password is not empty
+      ansible.builtin.assert:
+        that:
+          - vnc_password is defined
+          - vnc_password | length > 0
+        fail_msg: "VNC password cannot be empty."
+        quiet: true
+
+    - name: Ensure remote Ansible tmp directory is owned by SSH user
+      ansible.builtin.file:
+        path: /tmp/.ansible
+        state: directory
+        mode: "0700"
+
+    - name: Install labwc, wlr-randr, wayvnc, novnc, and websockify
+      become: true
+      ansible.builtin.dnf:
+        name:
+          - labwc
+          - wlr-randr
+          - wayvnc
+          - novnc
+          - python3-websockify
+          - openssl
+        state: present
+
+    - name: Ensure noVNC index.html points to vnc.html
+      become: true
+      ansible.builtin.file:
+        src: /usr/share/novnc/vnc.html
+        dest: /usr/share/novnc/index.html
+        state: link
+        force: true
+
+    - name: Lookup UID for {{ vnc_user }}
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ vnc_user }}"
+
+    - name: Set user UID fact
+      ansible.builtin.set_fact:
+        vnc_uid: "{{ ansible_facts.getent_passwd[vnc_user][1] }}"
+
+    - name: Ensure LXQt, labwc, wayvnc, local bin, systemd user, and autostart directories exist
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "/home/{{ vnc_user }}/.config/lxqt", mode: "0755" }
+        - { path: "/home/{{ vnc_user }}/.config/lxqt/labwc", mode: "0755" }
+        - { path: "/home/{{ vnc_user }}/.config/wayvnc", mode: "0700" }
+        - { path: "/home/{{ vnc_user }}/.local/bin", mode: "0755" }
+        - { path: "/home/{{ vnc_user }}/.config/systemd/user", mode: "0755" }
+        - { path: "/home/{{ vnc_user }}/.config/autostart", mode: "0755" }
+
+    - name: Set LXQt Wayland compositor to labwc
+      ansible.builtin.lineinfile:
+        path: "/home/{{ vnc_user }}/.config/lxqt/session.conf"
+        regexp: '^compositor='
+        line: 'compositor=labwc'
+        insertafter: '^\[General\]'
+        create: true
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0644"
+      notify: Restart sddm
+
+    - name: Configure labwc autostart for 1500x1000 scaling (scale 2) and systemd env
+      ansible.builtin.copy:
+        dest: "/home/{{ vnc_user }}/.config/lxqt/labwc/autostart"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0755"
+        content: |
+          dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP >/dev/null 2>&1 &
+          wlr-randr --output eDP-1 --scale 2 >/dev/null 2>&1 &
+      notify: Restart sddm
+
+    - name: Generate RSA key for wayvnc RSA-AES auth
+      ansible.builtin.command:
+        cmd: "ssh-keygen -m pem -f /home/{{ vnc_user }}/.config/wayvnc/rsa_key.pem -t rsa -N ''"
+        creates: "/home/{{ vnc_user }}/.config/wayvnc/rsa_key.pem"
+      notify: Restart wayvnc
+
+    - name: Generate self-signed TLS key and cert for wayvnc and noVNC HTTPS
+      ansible.builtin.command:
+        cmd: >
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 -sha384
+          -days 3650 -nodes
+          -keyout /home/{{ vnc_user }}/.config/wayvnc/tls_key.pem
+          -out /home/{{ vnc_user }}/.config/wayvnc/tls_cert.pem
+          -subj /CN=192.168.4.19
+          -addext subjectAltName=IP:192.168.4.19,IP:127.0.0.1,DNS:localhost
+        creates: "/home/{{ vnc_user }}/.config/wayvnc/tls_cert.pem"
+      notify:
+        - Restart wayvnc
+        - Restart novnc
+
+    - name: Enforce permissions on wayvnc keys
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "/home/{{ vnc_user }}/.config/wayvnc/rsa_key.pem", mode: "0600" }
+        - { path: "/home/{{ vnc_user }}/.config/wayvnc/rsa_key.pem.pub", mode: "0644" }
+        - { path: "/home/{{ vnc_user }}/.config/wayvnc/tls_key.pem", mode: "0600" }
+        - { path: "/home/{{ vnc_user }}/.config/wayvnc/tls_cert.pem", mode: "0644" }
+
+    - name: Write wayvnc configuration (RSA-AES for TigerVNC + ARD type 30 for noVNC)
+      ansible.builtin.copy:
+        dest: "/home/{{ vnc_user }}/.config/wayvnc/config"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0600"
+        content: |
+          use_relative_paths=true
+          address=0.0.0.0
+          port={{ vnc_port }}
+          enable_auth=true
+          username={{ vnc_user }}
+          password={{ vnc_password }}
+          relax_encryption=true
+          rsa_private_key_file=rsa_key.pem
+      no_log: true
+      notify: Restart wayvnc
+
+    - name: Deploy wayvnc launcher script
+      ansible.builtin.copy:
+        dest: "/home/{{ vnc_user }}/.local/bin/start-wayvnc.sh"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+          if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+            for sock in "${RUNTIME_DIR}"/wayland-[0-9]*; do
+              if [ -S "${sock}" ]; then
+                export WAYLAND_DISPLAY="$(basename "${sock}")"
+                break
+              fi
+            done
+          fi
+
+          if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+            echo "No Wayland display socket found in ${RUNTIME_DIR}" >&2
+            exit 1
+          fi
+
+          exec /usr/bin/wayvnc --log-level=info --config="${HOME}/.config/wayvnc/config"
+      notify: Restart wayvnc
+
+    - name: Install systemd user unit for wayvnc
+      ansible.builtin.copy:
+        dest: "/home/{{ vnc_user }}/.config/systemd/user/wayvnc.service"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Wayland VNC Server (wayvnc)
+          After=graphical-session.target
+
+          [Service]
+          Type=simple
+          ExecStart=/home/{{ vnc_user }}/.local/bin/start-wayvnc.sh
+          Restart=on-failure
+          RestartSec=3
+
+          [Install]
+          WantedBy=default.target
+      notify:
+        - Reload systemd user daemon
+        - Restart wayvnc
+
+    - name: Install systemd user unit for noVNC (websockify on :{{ novnc_port }})
+      ansible.builtin.copy:
+        dest: "/home/{{ vnc_user }}/.config/systemd/user/novnc.service"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=noVNC WebSocket Proxy for wayvnc
+          After=wayvnc.service
+          Requires=wayvnc.service
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/bin/websockify --web /usr/share/novnc --cert /home/{{ vnc_user }}/.config/wayvnc/tls_cert.pem --key /home/{{ vnc_user }}/.config/wayvnc/tls_key.pem {{ novnc_port }} 127.0.0.1:{{ vnc_port }}
+          Restart=on-failure
+          RestartSec=3
+
+          [Install]
+          WantedBy=default.target
+      notify:
+        - Reload systemd user daemon
+        - Restart novnc
+
+    - name: Create LXQt autostart entry to launch wayvnc and noVNC user services
+      ansible.builtin.copy:
+        dest: "/home/{{ vnc_user }}/.config/autostart/wayvnc.desktop"
+        owner: "{{ vnc_user }}"
+        group: "{{ vnc_user }}"
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Wayland VNC & noVNC (wayvnc)
+          Exec=systemctl --user restart wayvnc.service novnc.service
+          OnlyShowIn=LXQt;
+          X-LXQt-Need-Tray=false
+
+    - name: Configure SDDM autologin to LXQt Wayland session
+      become: true
+      when: enable_sddm_autologin | bool
+      ansible.builtin.copy:
+        dest: /etc/sddm.conf.d/autologin.conf
+        mode: "0644"
+        content: |
+          [Autologin]
+          User={{ vnc_user }}
+          Session=lxqt-wayland.desktop
+          Relogin=false
+      notify: Restart sddm
+
+    - name: Allow VNC ({{ vnc_port }}) and noVNC ({{ novnc_port }}) from LAN in firewalld
+      become: true
+      ansible.posix.firewalld:
+        rich_rule: "rule family='ipv4' source address='{{ vnc_lan_cidr }}' port port='{{ item }}' protocol='tcp' accept"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop:
+        - "{{ vnc_port }}"
+        - "{{ novnc_port }}"
+
+    - name: Flush pending SDDM, wayvnc, and noVNC handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Ensure wayvnc and noVNC are running if a Wayland session is active
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ vnc_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ vnc_uid }}/bus"
+      ansible.builtin.shell: |
+        for i in $(seq 1 15); do
+          if ls /run/user/{{ vnc_uid }}/wayland-[0-9]* >/dev/null 2>&1; then
+            systemctl --user start wayvnc.service novnc.service
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "No active Wayland socket found after SDDM check" >&2
+        exit 1
+      changed_when: false
+
+    - name: Verify wayvnc ({{ vnc_port }}) and noVNC ({{ novnc_port }}) are listening
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        timeout: 15
+      loop:
+        - "{{ vnc_port }}"
+        - "{{ novnc_port }}"
+
+  handlers:
+    - name: Restart sddm
+      become: true
+      ansible.builtin.systemd:
+        name: sddm.service
+        state: restarted
+
+    - name: Reload systemd user daemon
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ vnc_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ vnc_uid }}/bus"
+      ansible.builtin.systemd_service:
+        scope: user
+        daemon_reload: true
+      failed_when: false
+
+    - name: Restart wayvnc
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ vnc_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ vnc_uid }}/bus"
+      ansible.builtin.shell: |
+        if ls /run/user/{{ vnc_uid }}/wayland-[0-9]* >/dev/null 2>&1; then
+          systemctl --user restart wayvnc.service
+        fi
+      changed_when: false
+
+    - name: Restart novnc
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ vnc_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ vnc_uid }}/bus"
+      ansible.builtin.shell: |
+        if ls /run/user/{{ vnc_uid }}/wayland-[0-9]* >/dev/null 2>&1; then
+          systemctl --user restart novnc.service
+        fi
+      changed_when: false

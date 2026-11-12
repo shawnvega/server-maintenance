@@ -9,7 +9,7 @@ This repository manages automation and configuration for self-hosted home server
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119`, API server `:8642`, desktop `:6080`), `open-webui` (`:3000`) |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119`, API server `:8642`, optional desktop `:6081`), `open-webui` (`:3000`), host `wayvnc`/`noVNC` (`:5900`/`:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
 | `192.168.64.6` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Gateway backed by Mac host Ollama) |
@@ -42,6 +42,8 @@ This repository isolates Ansible and its dependencies in a project-local virtual
    * Deploy or update them anytime using `./run.sh deploy-automation`. On-demand master upgrades can be started directly in Cockpit via `ansible-upgrade-all.service`.
 7. **Hermes Workspace Permissions (`192.168.4.19`)**:
    * Host data directory `/home/shawn/docker/hermes/data` must strictly be mode `0755` (`go-w`) and owned by UID 1000 (`shawn`). Never set `0777` (world-writable), which fails Hermes internal security gates (`unsafe_control_permissions`) and traps the chat TUI in an endless 30s reconnect loop.
+8. **Ansible `remote_tmp` & Privilege Scoping**:
+   * Because `inventory.ini` sets `ansible_remote_tmp=/tmp/.ansible` and `ansible.cfg` enables `pipelining = True`, never set `become: true` at the play level when using file-transfer modules (`copy`, `template`). Create `/tmp/.ansible` (`0700`) as the SSH user first, and scope `become: true` strictly to individual root tasks so `/tmp/.ansible` is never left `root`-owned (`0700`), which blocks SFTP staging.
 
 ---
 
@@ -98,6 +100,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 ./run.sh cleanup -K                      # Vacuum journals, clean package caches, prune docker
 ./run.sh restart-vlc                     # Restart persistent VLC RTSP stream (.18)
 ./run.sh test-hermes                     # Verify Hermes Gateway, Desktop, TUI grant & LiteLLM
+./run.sh setup-vnc                       # Install & configure Wayland VNC (wayvnc) & 1500x1000 scaling (.19)
 ./run.sh setup-whisper                   # Install & verify local Apple Silicon MLX Whisper daemon (.8)
 ./run.sh check-host5                     # Inspect Host 5 status log
 ./run.sh upgrade-host5 -K                # Trigger detached standalone upgrade for Host 5
@@ -107,6 +110,6 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 # Ad-hoc Shell & Container Commands
 ./run.sh raw 'uptime'
 ./run.sh raw 'df -h'
-./run.sh raw 'docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes profile list' --limit 192.168.4.19
+.venv/bin/ansible 192.168.4.19 -m command -a 'docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes profile list'
 ssh -t shawn@192.168.4.19 'docker exec -it -u hermes hermes-gateway bash'
 ```

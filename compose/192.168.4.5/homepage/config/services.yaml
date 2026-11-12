@@ -5,6 +5,11 @@
         href: https://192.168.4.66
         description: Remote Hardware Console (Arch ARM)
         ping: 192.168.4.66
+    - JetKVM:
+        icon: jetkvm.png
+        href: http://192.168.4.9/
+        description: Remote Hardware Console (JetKVM)
+        ping: 192.168.4.9
     - Cockpit (Pi 5):
         icon: cockpit.png
         href: https://192.168.4.5:9090
@@ -14,6 +19,11 @@
         icon: cockpit.png
         href: https://192.168.4.19:9090
         description: Fedora Web Admin Console (Workstation)
+        ping: 192.168.4.19
+    - Fedora Desktop:
+        icon: fedora.png
+        href: https://192.168.4.19:6080
+        description: Fedora Physical Desktop (noVNC)
         ping: 192.168.4.19
     - Caddy Proxy:
         icon: caddy.png
@@ -31,15 +41,15 @@
         description: AI Chat & Hermes Agent Interface (Fedora)
         ping: 192.168.4.19
     - LiteLLM Proxy:
-        icon: litellm.png
+        icon: sh-litellm.png
         href: http://192.168.4.5:4000
         description: AI Gateway & Routing (Pi 5)
         server: local-docker
         container: litellm
     - Hermes Desktop:
         icon: hermes.png
-        href: http://192.168.4.19:6080
-        description: Agent Web Desktop & Browser (Fedora)
+        href: http://192.168.4.19:6081
+        description: Optional Agent Sandbox Desktop (Fedora)
         ping: 192.168.4.19
     - Hermes Gateway:
         icon: hermes.png

@@ -198,6 +198,13 @@ When upgrade pipelines (`upgrade.yml` or `upgrade_all.yml`) are executed from Se
   ssh shawn@192.168.4.11 'sudo raspi-config nonint do_overlayfs 0 && sudo reboot'
   ```
 
+### Fedora Wayland VNC / noVNC (`192.168.4.19`)
+* **Gray screen on connect (`miriway-shell`)**: `miriway-shell` (Mir 2.25) throws `not implemented` on `ImageCopyCaptureManagerV1::create_pointer_cursor_session()`. Use `labwc` (`compositor=labwc` in `~/.config/lxqt/session.conf` with pre-created `~/.config/lxqt/labwc/autostart`, as Fedora 43 lacks `/usr/share/lxqt/wayland/labwc/`).
+* **`wayvnc 0.9.1` + `noVNC 1.5.0` security handshake failures**:
+  * Do **not** set `allow_broken_crypto=true` (unsupported in `wayvnc 0.9.1`).
+  * Keep TLS certs (`--cert`/`--key`) on `websockify` (`https://192.168.4.19:6080/`), **not** in `wayvnc/config`; use `relax_encryption=true` + `rsa_private_key_file=rsa_key.pem` so `wayvnc` advertises `[129, 5, 30]` (`noVNC` uses `ARD (30)`, `TigerVNC.app` uses `RSA-AES (129)`), avoiding `VeNCrypt (19)` subtype `262` which `noVNC 1.5.0` rejects.
+* **Ansible `Failed to create temporary directory` on `/tmp/.ansible`**: Remove any root-owned `/tmp/.ansible` on the target host and ensure playbooks do not set play-level `become: true` ahead of `copy`/`template` tasks.
+
 ---
 
 ## 4. Modern Ansible (v14 / Core 2.21) Playbook Standards
@@ -206,3 +213,4 @@ When writing or editing playbooks in this repository:
 1. **Fact Access**: Always use `ansible_facts['<name>']` (e.g. `ansible_facts['os_family']`) rather than deprecated bare facts like `ansible_os_family`.
 2. **Explicit Returns**: Provide explicit `changed_when:` and `failed_when:` on any `command`, `shell`, or `raw` tasks (implicit `rc` failure inference is deprecated).
 3. **Strict Booleans in Conditionals**: Ensure `when:` expressions evaluate strictly to booleans (e.g., `when: backup_method | default('none') == 'rpi-clone'`). Do not embed `{{ }}` templates inside `when:`.
+4. **Privilege Scoping with `remote_tmp`**: Never set `become: true` at the play level on playbooks that use `copy`/`template`; pre-create `/tmp/.ansible` (`0700`) as the SSH user and apply `become: true` only on tasks requiring `root`.

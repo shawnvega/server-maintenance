@@ -92,6 +92,21 @@ model_list:
     model_info:
       mode: audio_transcription
 
+  # --- OpenRouter Free Models ---
+  - model_name: gemma4-26b-free
+    litellm_params:
+      model: openrouter/google/gemma-4-26b-a4b-it:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
+    model_info:
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+
   # -------------------------------------------------------------------------
   # Fallback Models: When ready, uncomment and supply API key in docker-compose.yml
   # -------------------------------------------------------------------------
@@ -105,12 +120,14 @@ model_list:
   #     model: groq/whisper-large-v3
   #     api_key: os.environ/GROQ_API_KEY
 
-# router_settings:
-#   fallbacks:
-#     - coding-26b: ["gemini-coding"]
-#     - whisper: ["cloud-whisper"]
-#   allowed_fails: 1
-#   cooldown_time: 60
+litellm_settings:
+  drop_params: true
+
+router_settings:
+  fallbacks:
+    - gemma4-26b-free: ["coding-26b"]
+  allowed_fails: 1
+  cooldown_time: 60
 
 general_settings:
   master_key: "sk-hermes-mac-secret"

@@ -11,7 +11,7 @@ Host `192.168.4.19` (Fedora Linux 43 x86_64, Btrfs root) runs a dual-container a
 | Container | Port | Role & Image | Resource Allocation |
 |---|---|---|---|
 | **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 1.5`, `mem_limit: 4096m`, `mem_reservation: 1024m` |
-| **`hermes-desktop`** | `6080` (HTTP/VNC) | Unprivileged sandbox for browser/UI automation (`hermes-desktop:minimal`): `Xvfb` (:1, 1280x800), `openbox`, `chromium` (`--no-sandbox`), `noVNC` | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
+| **`hermes-desktop`** | `6081` (HTTP/VNC, `desktop` profile) | Optional unprivileged sandbox for browser/UI automation (`hermes-desktop:minimal`): `Xvfb` (:1, 1280x800), `openbox`, `chromium` (`--no-sandbox`), `noVNC` | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 | **`open-webui`** | `3000` (HTTP WebUI) | Feature-rich AI chat interface connected to Hermes Agent (`:8642`) and LiteLLM (`:4000`) (`ghcr.io/open-webui/open-webui:main`) | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 
 * **Co-located Workload**: Frigate NVR (Coral TPU + `/dev/dri/renderD128` Intel VAAPI transcoding) shares the host. Resource limits preserve ~4GB RAM for Fedora and Frigate.
@@ -89,7 +89,7 @@ If Hermes displays `coding 26b │ ... / 256k` despite configuring Ollama with `
   ```
 
 ### 3. `hermes: command not found` in Desktop LXTerminal
-* **Symptom**: Running `hermes` inside the virtual desktop terminal (`http://192.168.4.19:6080`) fails.
+* **Symptom**: Running `hermes` inside the virtual desktop terminal (`http://192.168.4.19:6081`) fails.
 * **Root Cause**: `hermes-desktop` is an unprivileged browser sandbox. The agent runtime and CLI exist exclusively inside `hermes-gateway`.
 * **Resolution**: Run commands targeting `hermes-gateway` via `docker exec`:
   ```bash
@@ -120,7 +120,7 @@ Verifies gateway bootstrap grant, LiteLLM model listing, test inference completi
 | **Open-WebUI Dashboard** | `http://192.168.4.19:3000/` | Initial admin onboarding | Full-featured ChatGPT-style interface with `hermes-agent` and LiteLLM models |
 | **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer token (`API_SERVER_KEY`) | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
 | **Hermes Gateway Web UI** | `http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace |
-| **Hermes Virtual Desktop** | `http://192.168.4.19:6080/` | None (sandboxed) | noVNC graphical browser/desktop environment |
+| **Hermes Virtual Desktop** | `http://192.168.4.19:6081/` | None (sandboxed, `desktop` profile) | noVNC graphical browser/desktop environment |
 | **macOS Native App** | `/Applications/Hermes.app` | Gateway URL: `http://192.168.4.19:9119` | Remote gateway client |
 
 ---

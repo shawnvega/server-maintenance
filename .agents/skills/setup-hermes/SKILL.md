@@ -48,7 +48,7 @@ When encountering issues, locate your symptom below for the instant verified fix
     * Preserves ~3.5GB RAM for Fedora system overhead and Frigate NVR.
 * **Hermes & WebUI Stack (`compose/192.168.4.19/`)**:
   * **`hermes-gateway`** (Ports **`9119`** WebUI & **`8642`** OpenAI API): Core agent runtime, tool execution engine, session store, authenticated REST/WebSocket dashboard, and native OpenAI-compatible API server (`hermes-gateway:custom`).
-  * **`hermes-desktop`** (Port **`6080`**): Sandboxed virtual desktop (`hermes-desktop:minimal`) running `Xvfb` (display `:1`, 1280x800 24-bit TrueColor), `openbox`, `lxterminal`, `chromium` (`--no-sandbox`), and `noVNC` via `websockify`.
+  * **`hermes-desktop`** (Port **`6081`**, optional `desktop` profile): Sandboxed virtual desktop (`hermes-desktop:minimal`) running `Xvfb` (display `:1`, 1280x800 24-bit TrueColor), `openbox`, `lxterminal`, `chromium` (`--no-sandbox`), and `noVNC` via `websockify`.
   * **`open-webui`** (Port **`3000`**): Rich ChatGPT-style chat interface (`ghcr.io/open-webui/open-webui:main`) pre-configured with dual backends: Hermes Agent (`http://192.168.4.19:8642/v1`) and LiteLLM (`http://192.168.4.5:4000/v1`).
   * **Shared Workspace**: `/home/shawn/docker/hermes/data` mounted to `/opt/data` (gateway) and `/home/hermes/workspace` (desktop).
 * **LLM & Audio STT Provider**:
@@ -266,7 +266,7 @@ If debugging a specific component manually:
 | **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer: `API_SERVER_KEY` | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
 | **macOS Native App** | `/Applications/Hermes.app` | Gateway URL: `http://192.168.4.19:9119`<br>User: `admin` / Pass: `hermesadmin` | Select "Remote gateway" mode |
 | **Web Chat Dashboard** | `http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | In-browser chat, tool execution trace, workspace inspector |
-| **Web Virtual Desktop** | `http://192.168.4.19:6080/` | None (sandboxed) | Right-click for Openbox menu: LXTerminal, Chromium (`--no-sandbox`), ObConf |
+| **Web Virtual Desktop** | `http://192.168.4.19:6081/` | None (sandboxed, `desktop` profile) | Right-click for Openbox menu: LXTerminal, Chromium (`--no-sandbox`), ObConf |
 
 ---
 

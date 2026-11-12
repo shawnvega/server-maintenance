@@ -9,7 +9,7 @@ headerStyle: clean
 layout:
   Core Infrastructure:
     style: row
-    columns: 5
+    columns: 3
   Automation & AI:
     style: row
     columns: 4

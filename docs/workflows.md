@@ -301,5 +301,21 @@ The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.
 * **Mac Firewall Security**:
   Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
 
+---
+
+## 12. Host Wayland VNC, noVNC & Display Scaling (`192.168.4.19`)
+
+Host `192.168.4.19` runs a native **Wayland VNC server (`wayvnc`)** on port `5900` and **noVNC (`websockify`)** on port `6080` mirroring the physical **`labwc`** (`lxqt-wayland`) desktop—while the optional `hermes-desktop` sandbox container uses port `6081` (`desktop` profile).
+
+* **Permanent Display Scaling**: `~/.config/lxqt/labwc/autostart` runs `wlr-randr --output eDP-1 --scale 2`, giving `eDP-1` (`3000x2000@60.0`) a permanent `1500x1000` logical resolution whether or not VNC is connected.
+* **SDDM Autologin**: `/etc/sddm.conf.d/autologin.conf` automatically logs `shawn` into `lxqt-wayland.desktop` on boot so `wayvnc.service` and `novnc.service` (`systemctl --user status wayvnc novnc`) start immediately.
+* **Firewall & Client Access**: `firewalld` permits `5900/tcp` and `6080/tcp` only from `192.168.4.0/24`.
+  * **Browser (`noVNC`)**: `https://192.168.4.19:6080/` (TLS/WSS with self-signed cert so browser WebCrypto supports `wayvnc` RSA-AES auth; login as `shawn` + VNC password).
+  * **Native VNC Client**: Connect **`TigerVNC.app`** or **`VNC Viewer.app`** to `192.168.4.19:5900` (login as `shawn` + VNC password).
+* **Deployment & Password Rotation**:
+  ```bash
+  ./run.sh setup-vnc
+  ```
+
 
 

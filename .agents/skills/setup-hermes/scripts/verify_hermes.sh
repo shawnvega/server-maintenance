@@ -15,7 +15,7 @@ LITELLM_KEY="${LITELLM_KEY:-sk-hermes-mac-secret}"
 HERMES_API_KEY="${HERMES_API_KEY:-800e4dd6423a533409960e90e1b03a6a2d5687ee63ef4ac7f759f425dd1388de}"
 HERMES_API_PORT="${HERMES_API_PORT:-8642}"
 OPENWEBUI_PORT="${OPENWEBUI_PORT:-3000}"
-DEFAULT_MODEL="${DEFAULT_MODEL:-coding-26b}"
+DEFAULT_MODEL="${DEFAULT_MODEL:-gemma4-26b-free}"
 QUICK_MODE=false
 
 usage() {
@@ -185,20 +185,17 @@ fi
 
 if echo "${CONTAINERS_STATUS}" | grep -q "hermes-desktop: Up"; then
   pass "Container 'hermes-desktop' is running"
-else
-  fail "Container 'hermes-desktop' is not running" \
-       "Check logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-desktop --tail 50'"
-fi
+  info "6. Checking Virtual Desktop Port 6081..."
+  DESKTOP_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://${TARGET_HOST}:6081/vnc.html" 2>/dev/null || echo "000")
 
-# 6. Desktop noVNC Port (6080)
-info "6. Checking Virtual Desktop Port 6080..."
-DESKTOP_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://${TARGET_HOST}:6080/vnc.html" 2>/dev/null || echo "000")
-
-if [[ "${DESKTOP_HTTP_CODE}" == "200" ]]; then
-  pass "Virtual Desktop noVNC web interface is responding on port 6080 (HTTP 200)"
+  if [[ "${DESKTOP_HTTP_CODE}" == "200" ]]; then
+    pass "Virtual Desktop noVNC web interface is responding on port 6081 (HTTP 200)"
+  else
+    warn "Virtual Desktop port 6081 returned HTTP ${DESKTOP_HTTP_CODE}" \
+         "Verify container logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-desktop --tail 30'"
+  fi
 else
-  warn "Virtual Desktop port 6080 returned HTTP ${DESKTOP_HTTP_CODE}" \
-       "Verify container logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-desktop --tail 30'"
+  info "6. Container 'hermes-desktop' is disabled/stopped (optional 'desktop' profile on :6081)."
 fi
 
 # 7. Internal TUI Gateway WebSocket Grant & Ticket Check
