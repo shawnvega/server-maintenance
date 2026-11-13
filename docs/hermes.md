@@ -69,7 +69,8 @@ The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.
 * **Routing**:
   * **Chat Completions** (`coding-12b`, `coding-26b`, `coding-31b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`) with 128k context bounds.
   * **Speech-to-Text** (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
-  * **Cloud Fallbacks**: Configurable in `compose/192.168.4.5/litellm/config/litellm_config.yaml` to redirect to cloud APIs (Gemini, Groq, OpenAI) when the Mac is offline.
+  * **Cloud Primary & Fallbacks**: Routes `openrouter-free` and `gemma4-26b-free` with automatic failover cascade: Tier 1 Free Cloud (`:free`) -> Tier 2 Paid Cloud (`google/gemma-4-26b-a4b-it`) -> Tier 3 Local Mac (`coding-26b`) -> Tier 4 Universal Cloud Backup (`google/gemma-4-31b-it`).
+  * **Universal Cloud Safety Net**: All local Mac routes (`coding-12b`, `coding-26b`, `coding-31b`) and cloud routes automatically fail over to `google/gemma-4-31b-it` when local hardware is offline or primary cloud endpoints fail.
 * **Mac Firewall**: Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by the macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
 
 ### MLX Whisper Voice Dictation & STT (`192.168.4.8:8080`)

@@ -121,6 +121,64 @@ model_list:
       max_input_tokens: 262144
       max_output_tokens: 16384
 
+  # --- OpenRouter Standard / Paid Route (Direct & Resilient Fallback) ---
+  - model_name: google/gemma-4-26b-a4b-it
+    litellm_params:
+      model: openrouter/google/gemma-4-26b-a4b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
+    model_info:
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+
+  - model_name: gemma4-26b-paid
+    litellm_params:
+      model: openrouter/google/gemma-4-26b-a4b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
+    model_info:
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+
+  # --- OpenRouter Gemma 4 31B (Direct & Universal Safety Net Fallback) ---
+  - model_name: google/gemma-4-31b-it
+    litellm_params:
+      model: openrouter/google/gemma-4-31b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
+    model_info:
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+
+  - model_name: gemma4-31b-paid
+    litellm_params:
+      model: openrouter/google/gemma-4-31b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
+    model_info:
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+
   # -------------------------------------------------------------------------
   # Fallback Models: When ready, uncomment and supply API key in docker-compose.yml
   # -------------------------------------------------------------------------
@@ -139,8 +197,22 @@ litellm_settings:
 
 router_settings:
   fallbacks:
-    - openrouter-free: ["coding-26b"]
-    - gemma4-26b-free: ["coding-26b"]
+    # Free models: Tier 1 free -> Tier 2 26B paid -> Tier 3 local 26B -> Tier 4 31B universal backup
+    - openrouter-free: ["google/gemma-4-26b-a4b-it", "coding-26b", "google/gemma-4-31b-it"]
+    - gemma4-26b-free: ["google/gemma-4-26b-a4b-it", "coding-26b", "google/gemma-4-31b-it"]
+    # Paid 26B models: fall back to local 26B, then 31B universal backup
+    - google/gemma-4-26b-a4b-it: ["coding-26b", "google/gemma-4-31b-it"]
+    - gemma4-26b-paid: ["coding-26b", "google/gemma-4-31b-it"]
+    # Local Mac models: fall back to google/gemma-4-31b-it when Mac is offline, asleep, or busy
+    - coding-12b: ["google/gemma-4-31b-it"]
+    - gemma4:12b-mlx-code: ["google/gemma-4-31b-it"]
+    - ollama/gemma4:12b-mlx-code: ["google/gemma-4-31b-it"]
+    - coding-26b: ["google/gemma-4-31b-it"]
+    - gemma4:26b-mlx-code: ["google/gemma-4-31b-it"]
+    - ollama/gemma4:26b-mlx-code: ["google/gemma-4-31b-it"]
+    - coding-31b: ["google/gemma-4-31b-it"]
+    - gemma4:31b-mlx-code: ["google/gemma-4-31b-it"]
+    - ollama/gemma4:31b-mlx-code: ["google/gemma-4-31b-it"]
   allowed_fails: 1
   cooldown_time: 60
 

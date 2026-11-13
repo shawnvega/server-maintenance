@@ -54,16 +54,18 @@ When encountering issues, locate your symptom below for the instant verified fix
 * **LLM & Audio STT Provider**:
   * Engine (Host Mac at `192.168.4.8`): Local Ollama serving 3 local coding models (`gemma4:12b-mlx-code`, `gemma4:26b-mlx-code`, `gemma4:31b-mlx-code` on port `11434`) + local MLX Whisper (`:8080`), protected by macOS PF firewall whitelist.
   * Central Proxy (Pi 5 at `192.168.4.5:4000`): Dockerized LiteLLM proxy with Bearer token authentication (`sk-hermes-mac-secret`), managed via `compose/192.168.4.5/litellm` and `./run.sh litellm`.
-  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring aliases `openrouter-free` (default), `gemma4-26b-free`, `coding-12b`, `coding-26b` (local fallback), and `coding-31b` for LLM, plus `whisper` for `audio_transcription`. See [mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
+  * Configuration: `compose/192.168.4.5/litellm/config/litellm_config.yaml` declaring aliases `openrouter-free` (default), `gemma4-26b-free`, `google/gemma-4-26b-a4b-it` (26B paid route), `gemma4-26b-paid`, `google/gemma-4-31b-it` (31B universal backup), `gemma4-31b-paid`, `coding-12b`, `coding-26b` (local primary), and `coding-31b` for LLM, plus `whisper` for `audio_transcription`. See [mlx-whisper/SKILL.md](../mlx-whisper/SKILL.md).
 
 ### Coding Models Quick Reference & Usage
 | Model Alias | Underlying Backend | Footprint / Notes | Best Used For |
 |---|---|---|---|
-| `openrouter-free` | OpenRouter `openrouter/free` | **Default**: Cloud auto-router (`$0`), falls back to `coding-26b` on 429/error | General-purpose agentic & coding tasks with zero local GPU load |
-| `gemma4-26b-free` | OpenRouter `google/gemma-4-26b-a4b-it:free` | Cloud free tier (`$0`), falls back to `coding-26b` on 429/error | Direct Gemma 4 26B free routing (subject to shared pool limits) |
-| `coding-12b` | Mac Ollama `gemma4:12b-mlx-code` | ~7.7 GB | Fast interactive edits, simple functions, low resource consumption |
-| `coding-26b` | Mac Ollama `gemma4:26b-mlx-code` | ~17 GB | **Local fallback**: Balanced general-purpose coding agent workflows |
-| `coding-31b` | Mac Ollama `gemma4:31b-mlx-code` | ~19 GB | Complex multi-file reasoning, deep refactoring, complex logic |
+| `openrouter-free` | OpenRouter `openrouter/free` | **Default**: Cloud auto-router (`$0`), falls back to `google/gemma-4-26b-a4b-it` -> `coding-26b` -> `google/gemma-4-31b-it` | General-purpose agentic & coding tasks with zero local GPU load |
+| `gemma4-26b-free` | OpenRouter `google/gemma-4-26b-a4b-it:free` | Cloud free tier (`$0`), falls back to `google/gemma-4-26b-a4b-it` -> `coding-26b` -> `google/gemma-4-31b-it` | Direct Gemma 4 26B free routing (subject to shared pool limits) |
+| `google/gemma-4-26b-a4b-it` / `gemma4-26b-paid` | OpenRouter `google/gemma-4-26b-a4b-it` | **Cloud 26B fallback**: High uptime, 256K ctx | Resilient cloud fallback when free tier pool is rate-limited |
+| `google/gemma-4-31b-it` / `gemma4-31b-paid` | OpenRouter `google/gemma-4-31b-it` | **Universal Cloud Backup**: Dense 31B, 256K ctx | Universal safety net fallback across all models (local Mac & cloud) |
+| `coding-12b` | Mac Ollama `gemma4:12b-mlx-code` | ~7.7 GB, falls back to `google/gemma-4-31b-it` | Fast interactive edits, simple functions, low resource consumption |
+| `coding-26b` | Mac Ollama `gemma4:26b-mlx-code` | ~17 GB, falls back to `google/gemma-4-31b-it` | **Local baseline**: Balanced general-purpose coding agent workflows |
+| `coding-31b` | Mac Ollama `gemma4:31b-mlx-code` | ~19 GB, falls back to `google/gemma-4-31b-it` | Complex multi-file reasoning, deep refactoring, complex logic |
 
 *(OpenRouter API key is stored encrypted as `openrouter_api_key` in `vars/vault.yml` and templated into `~/docker/litellm/.env` via `compose/192.168.4.5/litellm/.env.j2`.)*
 
