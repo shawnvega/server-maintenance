@@ -71,6 +71,18 @@ The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.
   * **Speech-to-Text** (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
   * **Cloud Primary & Fallbacks**: Routes `openrouter-free` and `gemma4-26b-free` with automatic failover cascade: Tier 1 Free Cloud (`:free`) -> Tier 2 Paid Cloud (`google/gemma-4-26b-a4b-it`) -> Tier 3 Local Mac (`coding-26b`) -> Tier 4 Universal Cloud Backup (`google/gemma-4-31b-it`).
   * **Universal Cloud Safety Net**: All local Mac routes (`coding-12b`, `coding-26b`, `coding-31b`) and cloud routes automatically fail over to `google/gemma-4-31b-it` when local hardware is offline or primary cloud endpoints fail.
+
+#### Model Routing & Fallback Reference Table
+| Model Alias | Backend | Context Bounds | Role & Failover Cascade |
+|---|---|---|---|
+| `openrouter-free` | OpenRouter `openrouter/free` | 131k / 16k | **Default**: Free cloud auto-router. Falls back to `google/gemma-4-26b-a4b-it` -> `coding-26b` -> `google/gemma-4-31b-it`. |
+| `gemma4-26b-free` | OpenRouter `google/gemma-4-26b-a4b-it:free` | 256k / 16k | Free tier direct Gemma 4 26B. Falls back to `google/gemma-4-26b-a4b-it` -> `coding-26b` -> `google/gemma-4-31b-it`. |
+| `google/gemma-4-26b-a4b-it` / `gemma4-26b-paid` | OpenRouter `google/gemma-4-26b-a4b-it` | 256k / 16k | **Paid 26B Route**: High uptime, zero local GPU load. Falls back to `coding-26b` -> `google/gemma-4-31b-it`. |
+| `google/gemma-4-31b-it` / `gemma4-31b-paid` | OpenRouter `google/gemma-4-31b-it` | 256k / 16k | **Universal Cloud Backup**: Dense 31B parameter model serving as the ultimate safety net for all cluster workloads. |
+| `coding-12b` | Mac Ollama `gemma4:12b-mlx-code` | 131k / 16k | Fast interactive edits, local Metal acceleration. Falls back to `google/gemma-4-31b-it` when Mac is offline. |
+| `coding-26b` | Mac Ollama `gemma4:26b-mlx-code` | 131k / 16k | **Local Baseline**: Balanced agentic coding. Falls back to `google/gemma-4-31b-it` when Mac is offline. |
+| `coding-31b` | Mac Ollama `gemma4:31b-mlx-code` | 131k / 16k | Deep architectural refactoring. Falls back to `google/gemma-4-31b-it` when Mac is offline. |
+| `whisper` / `whisper-1` | Mac MLX Whisper (`:8080/v1`) | Audio STT | Local Metal STT transcription for voice dictation. |
 * **Mac Firewall**: Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by the macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
 
 ### MLX Whisper Voice Dictation & STT (`192.168.4.8:8080`)

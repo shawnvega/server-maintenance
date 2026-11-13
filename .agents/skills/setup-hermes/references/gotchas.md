@@ -530,6 +530,6 @@ This reference details specific failure modes, symptoms, root causes, and fixes 
 * **The Fix**:
   1. Map `temperature: 0.0`, `top_p: 0.95`, `repetition_penalty: 1.05`, and `stop: ["</tool_call>", "<|im_end|>"]` in `litellm_params`.
   2. Set `litellm_settings.drop_params: true` so LiteLLM strips any parameter rejected by an upstream provider instead of failing with HTTP 400.
-  3. Configure `router_settings.fallbacks` (e.g. `openrouter-free: ["coding-26b"]`) so `429` rate limits or upstream errors fall back seamlessly to local Mac Ollama.
+  3. Configure `router_settings.fallbacks` with a multi-tier fallback cascade (e.g. `openrouter-free: ["google/gemma-4-26b-a4b-it", "coding-26b", "google/gemma-4-31b-it"]`) so `429` rate limits or upstream errors fail over through paid cloud Gemma 26B, local Mac GPU, and finally universal cloud backup Gemma 31B. All local Mac routes (`coding-12b`, `coding-26b`, `coding-31b`) also define `google/gemma-4-31b-it` as their fallback when the host Mac is offline or sleeping.
 
 

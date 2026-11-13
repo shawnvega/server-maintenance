@@ -23,7 +23,7 @@ This document details the hardware, network topology, operating systems, storage
 
 ### 1. Hermes & AI Stack (`192.168.4.19`, `192.168.4.5`, `192.168.4.8`)
 * **Host Environment**: Fedora Linux (`192.168.4.19`, co-located with Frigate NVR) runs `hermes-gateway` (`:9119` Web/WS, `:8642` OpenAI API), optional `hermes-desktop` (`:6081` noVNC sandbox), and `open-webui` (`:3000`).
-* **Inference & STT Routing**: Requests route through the central LiteLLM proxy on Pi 5 (`192.168.4.5:4000`) to Apple Silicon Ollama (`192.168.4.8:11434`) and MLX Whisper (`192.168.4.8:8080`).
+* **Inference & STT Routing**: Requests route through the central LiteLLM proxy on Pi 5 (`192.168.4.5:4000`) supporting a hybrid multi-tier failover cascade: primary OpenRouter cloud routes (`openrouter-free`, `gemma4-26b-free`, `google/gemma-4-26b-a4b-it`) fail over to local Apple Silicon Ollama (`192.168.4.8:11434`), and all routes ultimately fail over to universal cloud backup `google/gemma-4-31b-it`. Audio transcription routes to local Mac MLX Whisper (`192.168.4.8:8080`).
 * **Deep Reference**: See [hermes.md](hermes.md) for container limits, permissions invariants, model/STT routing, and backup/DR runbooks.
 
 ### 2. OpenClaw UTM VMs (`192.168.64.6`, `192.168.64.9`)
