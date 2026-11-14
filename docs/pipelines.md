@@ -12,6 +12,7 @@ This document describes the Ansible maintenance and upgrade pipelines across the
 | `upgrade.yml` | `standard_servers` (`.4`, `.5`, `.18`, `.19`) | `strategy: linear` (staged) | `./run.sh upgrade -K` |
 | `readonly_upgrade.yml` | `readonly_servers` (`.11`) | Staged reboot cycle | `./run.sh upgrade-ro -K` |
 | `pikvm_upgrade.yml` | `pikvm_servers` (`.66`) | Root update & verify | `./run.sh upgrade-pikvm` |
+| `termux_upgrade.yml` | `termux_servers` (`.15`) | Native & PRoot script | `./run.sh upgrade-termux` |
 | `upgrade_mac.sh` | Local Mac workstation | Native bash script | `./run.sh upgrade-mac` |
 
 ---
@@ -190,4 +191,27 @@ Ansible tags allow targeted execution of specific pipeline stages without runnin
   # If display errors occur, ensure X11 display session :0 is active
   ssh shawn@192.168.4.18 'DISPLAY=:0 xrandr'
   ```
+
+---
+
+## 5. Termux & PRoot Workloads Pipeline (`termux_upgrade.yml`)
+
+Maintains the Pixel 5 (`192.168.4.15:8022`) host, encompassing both Android user-space Termux (`pkg`) and the underlying PRoot Debian environment with Python virtual environments (`esphome`, `hermes-agent`, `faster-whisper`).
+
+### Pipeline Stages
+1. **Load Check (`tags: [check, load]`)**: Verifies 1-minute load average against `load_threshold` (`4.0`).
+2. **Script Sync (`tags: [deploy, script]`)**: Deploys `scripts/termux_upgrade_host.sh` to `/data/data/com.termux/files/home/upgrade.sh` mode `0755`.
+3. **Execution (`tags: [upgrade]`)**:
+   * Upgrades Termux native packages via `pkg update` & `pkg upgrade -y`.
+   * Upgrades PRoot Debian packages via `apt-get dist-upgrade -y`, `autoremove`, and `clean`.
+   * Upgrades `/opt/esphome` via pip.
+   * Upgrades `/opt/hermes-agent` via pip.
+   * Upgrades `/opt/faster-whisper` via pip (safeguarding the `av>=13,<16` constraint).
+   * Restarts supervised services (`hermes-dashboard`, `faster-whisper`) with `sv force-restart`.
+4. **Verification (`tags: [verify]`)**:
+   * Prints `esphome` and `hermes` CLI versions.
+   * Queries `faster-whisper` `/health` endpoint (`:8081`).
+   * Queries `hermes-dashboard` HTTP status (`:9119`).
+   * Reports status of all supervised services (`sv status`).
+
 

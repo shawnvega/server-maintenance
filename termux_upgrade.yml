@@ -1,0 +1,48 @@
+---
+- name: Upgrade Termux Host & Workloads (Pixel 5)
+  hosts: termux_servers
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Pre-flight load check
+      tags: [check, load]
+      ansible.builtin.shell:
+        cmd: "uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | tr -d ','"
+      register: current_load
+      changed_when: false
+
+    - name: Display current system load
+      tags: [check, load]
+      ansible.builtin.debug:
+        msg: "Current 1-min load: {{ current_load.stdout }} (threshold: {{ load_threshold | default(4.0) }})"
+
+    - name: Ensure upgrade.sh script is present and executable
+      tags: [deploy, script]
+      ansible.builtin.copy:
+        src: scripts/termux_upgrade_host.sh
+        dest: /data/data/com.termux/files/home/upgrade.sh
+        mode: '0755'
+
+    - name: Execute Termux and workload upgrade script
+      tags: [upgrade]
+      ansible.builtin.command:
+        cmd: "/data/data/com.termux/files/home/upgrade.sh"
+      register: upgrade_output
+
+    - name: Display upgrade output
+      tags: [upgrade]
+      ansible.builtin.debug:
+        var: upgrade_output.stdout_lines
+
+    - name: Post-upgrade verification - check services
+      tags: [verify]
+      ansible.builtin.shell:
+        cmd: 'bash -lc "sv status sshd hermes-dashboard faster-whisper esphome-builder"'
+      register: sv_status
+      changed_when: false
+
+    - name: Display service status
+      tags: [verify]
+      ansible.builtin.debug:
+        var: sv_status.stdout_lines

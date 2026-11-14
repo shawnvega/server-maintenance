@@ -16,6 +16,7 @@ usage() {
   echo "  upgrade              Run full upgrade pipeline on standard servers"
   echo "  upgrade-ro           Run upgrade on read-only Pi (192.168.4.11 OverlayFS cycle)"
   echo "  upgrade-pikvm        Run upgrade on PiKVM (192.168.4.66 pikvm-update & RO restore)"
+  echo "  upgrade-termux       Run upgrade on Pixel 5 Termux (192.168.4.15 pkg & proot workloads)"
   echo "  upgrade-all          Run concurrent upgrades across ALL servers (standard + read-only Pi + PiKVM)"
   echo "  upgrade-mac          Run upgrade on local Mac (Homebrew formulae & casks, npm, gh, MAS, macOS)"
   echo "  cleanup              Reclaim disk space (journal vacuum, apt cache, docker prune)"
@@ -61,6 +62,7 @@ usage() {
   echo "  $0 upgrade -K                      # Standard servers: backup -> OS/Snap -> Docker -> VLC"
   echo "  $0 upgrade-ro -K                   # Read-only Pi (192.168.4.11) upgrade cycle"
   echo "  $0 upgrade-pikvm                   # PiKVM (192.168.4.66) upgrade cycle"
+  echo "  $0 upgrade-termux                  # Pixel 5 Termux upgrade cycle (ESPHome, Hermes, Whisper)"
   echo "  $0 upgrade-all -K                  # All servers simultaneously (strategy: free)"
   echo "  $0 upgrade-mac                     # Local Mac upgrade (brew, npm, apps)"
   echo "  $0 upgrade-mac -n                  # Local Mac upgrade dry-run"
@@ -142,6 +144,9 @@ case "${CMD}" in
     ;;
   upgrade-pikvm)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/pikvm_upgrade.yml" "$@"
+    ;;
+  upgrade-termux)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/termux_upgrade.yml" "$@"
     ;;
   upgrade-all)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/upgrade_all.yml" "$@"

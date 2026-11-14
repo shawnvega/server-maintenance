@@ -118,6 +118,85 @@
     force: false
   when: (stack_item | basename) == 'hermes'
 
+- name: "Ensure .ssh directory exists for hermes workspace"
+  tags: [docker]
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.ssh"
+    state: directory
+    mode: '0700'
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Ensure baseline .ssh/config exists for hermes workspace"
+  tags: [docker]
+  ansible.builtin.copy:
+    content: |
+      Host github.com
+          IdentityFile /opt/data/.ssh/id_ed25519_hermes
+          IdentitiesOnly yes
+
+      Host 192.168.4.5 rpi5
+          HostName 192.168.4.5
+          User shawn
+          IdentityFile /opt/data/.ssh/id_ed25519_hermes
+          IdentitiesOnly yes
+          StrictHostKeyChecking accept-new
+
+      Host 192.168.4.18 shawn-candy chromebook
+          HostName 192.168.4.18
+          User shawn
+          IdentityFile /opt/data/.ssh/id_ed25519_hermes
+          IdentitiesOnly yes
+          StrictHostKeyChecking accept-new
+    dest: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.ssh/config"
+    mode: '0600'
+    force: false
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Ensure SSH symlinks exist in hermes workspace"
+  tags: [docker]
+  ansible.builtin.file:
+    src: "{{ item.src }}"
+    dest: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.ssh/{{ item.dest }}"
+    state: link
+  loop:
+    - { src: "id_ed25519_hermes", dest: "id_ed25519" }
+    - { src: "id_ed25519_hermes.pub", dest: "id_ed25519.pub" }
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Ensure SSH host symlinks exist for user on 192.168.4.19"
+  tags: [docker]
+  ansible.builtin.file:
+    src: "{{ item.src }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ item.dest }}"
+    state: link
+  loop:
+    - { src: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.ssh/id_ed25519_hermes", dest: "id_ed25519" }
+    - { src: "{{ ansible_facts['user_dir'] }}/docker/hermes/data/.ssh/id_ed25519_hermes.pub", dest: "id_ed25519.pub" }
+  when: (stack_item | basename) == 'hermes'
+
+- name: "Ensure ~/.ssh/config exists on host 192.168.4.19"
+  tags: [docker]
+  ansible.builtin.copy:
+    content: |
+      Host 192.168.4.18 shawn-candy chromebook
+          HostName 192.168.4.18
+          User shawn
+          IdentityFile ~/.ssh/id_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking accept-new
+
+      Host 192.168.4.5 rpi5
+          HostName 192.168.4.5
+          User shawn
+          IdentityFile ~/.ssh/id_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking accept-new
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/config"
+    mode: '0600'
+    force: false
+  when: (stack_item | basename) == 'hermes'
+
+
 - name: "Template .env file for {{ stack_item }}"
   tags: [docker]
   ansible.builtin.template:

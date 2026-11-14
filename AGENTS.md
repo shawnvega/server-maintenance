@@ -12,6 +12,7 @@ This repository manages automation and configuration for self-hosted home server
 | `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119`, API server `:8642`, optional desktop `:6081`), `open-webui` (`:3000`), host `wayvnc`/`noVNC` (`:5900`/`:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
+| `192.168.4.15` | `u0_a287` | Android (Termux / PRoot Debian) | None | Read/Write | Hermes Agent (dashboard `:9119`), `faster-whisper` (`:8081`), `esphome` / `esphome-builder` (`:6055`), Termux OpenSSH (`:8022`) |
 | `192.168.64.6` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Gateway backed by Mac host Ollama) |
 | `192.168.64.9` | `shawn` | Debian 13 (UTM VM) | None | Read/Write | `openclaw` (Experimental Gateway backed by Mac host Ollama) |
 
@@ -44,6 +45,10 @@ This repository isolates Ansible and its dependencies in a project-local virtual
    * Host data directory `/home/shawn/docker/hermes/data` must strictly be mode `0755` (`go-w`) and owned by UID 1000 (`shawn`). Never set `0777` (world-writable), which fails Hermes internal security gates (`unsafe_control_permissions`) and traps the chat TUI in an endless 30s reconnect loop.
 8. **Ansible `remote_tmp` & Privilege Scoping**:
    * Because `inventory.ini` sets `ansible_remote_tmp=/tmp/.ansible` and `ansible.cfg` enables `pipelining = True`, never set `become: true` at the play level when using file-transfer modules (`copy`, `template`). Create `/tmp/.ansible` (`0700`) as the SSH user first, and scope `become: true` strictly to individual root tasks so `/tmp/.ansible` is never left `root`-owned (`0700`), which blocks SFTP staging.
+9. **Android & Termux Host Invariants (`192.168.4.15`)**:
+   * Never execute `pip install` natively in Termux for packages with compiled C/Rust dependencies (`cryptography`, `esphome`) or glibc toolchains (PlatformIO). Install strictly into isolated virtual environments inside `proot-distro debian` (`/opt/<name>`) and expose via `/data/data/com.termux/files/usr/bin/` wrappers.
+   * Never read `/proc/loadavg` directly from native Termux (blocked by Android SELinux). Use `uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | tr -d ','` or query from within `proot-distro debian`.
+   * All background daemons (`sshd`, `hermes-dashboard`, `faster-whisper`, `esphome-builder`) are supervised by Termux `termux-services` (`runit`). Use `sv force-restart` due to PRoot SIGTERM behavior.
 
 ---
 
@@ -92,6 +97,9 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 
 # PiKVM Maintenance (.66, connects as root, no -K needed)
 ./run.sh upgrade-pikvm
+
+# Termux & PRoot Debian Upgrade (.15, port 8022, no -K needed)
+./run.sh upgrade-termux
 
 # Local Mac Workstation Maintenance
 ./run.sh upgrade-mac                     # Standard update

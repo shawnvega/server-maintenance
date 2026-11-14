@@ -12,3 +12,14 @@
 
     - name: Deploy and restart Hermes stack
       ansible.builtin.include_tasks: tasks/restart_docker_stack.yml
+
+- name: Authorize Hermes Agent SSH key on cluster targets
+  hosts: 192.168.4.18
+  gather_facts: false
+  tasks:
+    - name: Ensure Hermes agent public key is authorized on 192.168.4.18
+      ansible.posix.authorized_key:
+        user: shawn
+        state: present
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGPtLoQtY9QhQwf5RnDfuNWgV7qmCQvjLZ13jul5CoaI hermes-agent-deploy-key"
+

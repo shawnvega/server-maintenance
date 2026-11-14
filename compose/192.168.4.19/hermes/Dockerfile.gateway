@@ -32,3 +32,8 @@ RUN curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_
 # 4. Set Java environment variables and safe default Gradle memory limits
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
     GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx1024m -XX:MaxMetaspaceSize=256m\""
+
+# 5. Pre-configure system-wide SSH client defaults for cluster nodes
+RUN mkdir -p /etc/ssh/ssh_config.d && \
+    printf 'Host 192.168.4.18 shawn-candy chromebook\n    HostName 192.168.4.18\n    User shawn\n    IdentityFile /opt/data/.ssh/id_ed25519_hermes\n    IdentitiesOnly yes\n    StrictHostKeyChecking accept-new\n    UserKnownHostsFile /opt/data/.ssh/known_hosts\n\nHost 192.168.4.5 rpi5\n    HostName 192.168.4.5\n    User shawn\n    IdentityFile /opt/data/.ssh/id_ed25519_hermes\n    IdentitiesOnly yes\n    StrictHostKeyChecking accept-new\n    UserKnownHostsFile /opt/data/.ssh/known_hosts\n' > /etc/ssh/ssh_config.d/hermes.conf
+
