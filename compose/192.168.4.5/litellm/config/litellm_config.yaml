@@ -1,98 +1,21 @@
 model_list:
-  # Primary LLM routes on Apple Silicon Mac (Metal GPU)
-  # --- 12B Coding Model ---
-  - model_name: ollama/gemma4:12b-mlx-code
+  # =========================================================================
+  # 1. OpenRouter Free Models (Tier 1 Primary Route: Free Cloud)
+  # =========================================================================
+  - model_name: default
     litellm_params:
-      model: ollama_chat/gemma4:12b-mlx-code
-      api_base: http://192.168.4.8:11434
+      model: openrouter/openrouter/free
+      api_key: os.environ/OPENROUTER_API_KEY
+      temperature: 0.0
+      top_p: 0.95
+      repetition_penalty: 1.05
+      stop:
+        - "</tool_call>"
+        - "<|im_end|>"
     model_info:
       max_input_tokens: 131072
       max_output_tokens: 16384
 
-  - model_name: gemma4:12b-mlx-code
-    litellm_params:
-      model: ollama_chat/gemma4:12b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  - model_name: coding-12b
-    litellm_params:
-      model: ollama_chat/gemma4:12b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  # --- 26B Coding Model (Default) ---
-  - model_name: ollama/gemma4:26b-mlx-code
-    litellm_params:
-      model: ollama_chat/gemma4:26b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  - model_name: gemma4:26b-mlx-code
-    litellm_params:
-      model: ollama_chat/gemma4:26b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  - model_name: coding-26b
-    litellm_params:
-      model: ollama_chat/gemma4:26b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  # --- 31B Coding Model ---
-  - model_name: ollama/gemma4:31b-mlx-code
-    litellm_params:
-      model: ollama_chat/gemma4:31b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  - model_name: gemma4:31b-mlx-code
-    litellm_params:
-      model: ollama_chat/gemma4:31b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  - model_name: coding-31b
-    litellm_params:
-      model: ollama_chat/gemma4:31b-mlx-code
-      api_base: http://192.168.4.8:11434
-    model_info:
-      max_input_tokens: 131072
-      max_output_tokens: 16384
-
-  # Primary STT routes (Local MLX Whisper on Apple Silicon Mac)
-  - model_name: whisper
-    litellm_params:
-      model: openai/whisper
-      api_base: http://192.168.4.8:8080/v1
-      api_key: "none"
-    model_info:
-      mode: audio_transcription
-
-  - model_name: whisper-1
-    litellm_params:
-      model: openai/whisper
-      api_base: http://192.168.4.8:8080/v1
-      api_key: "none"
-    model_info:
-      mode: audio_transcription
-
-  # --- OpenRouter Free Models ---
   - model_name: openrouter-free
     litellm_params:
       model: openrouter/openrouter/free
@@ -121,6 +44,87 @@ model_list:
       max_input_tokens: 262144
       max_output_tokens: 16384
 
+  # =========================================================================
+  # 2. Local Models on Apple Silicon Mac Metal GPU (Tier 2 Primary Local Route)
+  # =========================================================================
+  # --- 26B Coding Model (Primary Local) ---
+  - model_name: coding-26b
+    litellm_params:
+      model: ollama_chat/gemma4:26b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: gemma4:26b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:26b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: ollama/gemma4:26b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:26b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  # --- 12B Coding Model ---
+  - model_name: coding-12b
+    litellm_params:
+      model: ollama_chat/gemma4:12b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: gemma4:12b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:12b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: ollama/gemma4:12b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:12b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  # --- 31B Coding Model ---
+  - model_name: coding-31b
+    litellm_params:
+      model: ollama_chat/gemma4:31b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: gemma4:31b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:31b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  - model_name: ollama/gemma4:31b-mlx-code
+    litellm_params:
+      model: ollama_chat/gemma4:31b-mlx-code
+      api_base: http://192.168.4.8:11434
+    model_info:
+      max_input_tokens: 131072
+      max_output_tokens: 16384
+
+  # =========================================================================
+  # 3. OpenRouter Standard / Paid Routes (Tier 3 & Tier 4 Cloud Fallbacks)
+  # =========================================================================
   # --- OpenRouter Standard / Paid Route (Direct & Resilient Fallback) ---
   - model_name: google/gemma-4-26b-a4b-it
     litellm_params:
@@ -179,6 +183,25 @@ model_list:
       max_input_tokens: 262144
       max_output_tokens: 16384
 
+  # =========================================================================
+  # 4. Primary STT Routes (Local MLX Whisper on Apple Silicon Mac)
+  # =========================================================================
+  - model_name: whisper
+    litellm_params:
+      model: openai/whisper
+      api_base: http://192.168.4.8:8080/v1
+      api_key: "none"
+    model_info:
+      mode: audio_transcription
+
+  - model_name: whisper-1
+    litellm_params:
+      model: openai/whisper
+      api_base: http://192.168.4.8:8080/v1
+      api_key: "none"
+    model_info:
+      mode: audio_transcription
+
   # -------------------------------------------------------------------------
   # Fallback Models: When ready, uncomment and supply API key in docker-compose.yml
   # -------------------------------------------------------------------------
@@ -194,22 +217,25 @@ model_list:
 
 litellm_settings:
   drop_params: true
+  model_alias:
+    default: "openrouter-free"
 
 router_settings:
   fallbacks:
-    # Free models: Tier 1 free -> Tier 2 26B paid -> Tier 3 local 26B -> Tier 4 31B universal backup
-    - openrouter-free: ["google/gemma-4-26b-a4b-it", "coding-26b", "google/gemma-4-31b-it"]
-    - gemma4-26b-free: ["google/gemma-4-26b-a4b-it", "coding-26b", "google/gemma-4-31b-it"]
+    # Free models: Tier 1 free -> Tier 2 local 26B -> Tier 3 paid 26B -> Tier 4 31B universal backup
+    - default: ["coding-26b", "google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"]
+    - openrouter-free: ["coding-26b", "google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"]
+    - gemma4-26b-free: ["coding-26b", "google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"]
     # Paid 26B models: fall back to local 26B, then 31B universal backup
     - google/gemma-4-26b-a4b-it: ["coding-26b", "google/gemma-4-31b-it"]
     - gemma4-26b-paid: ["coding-26b", "google/gemma-4-31b-it"]
-    # Local Mac models: fall back to google/gemma-4-31b-it when Mac is offline, asleep, or busy
+    # Local Mac models: fall back to paid 26B, then 31B universal backup when Mac is offline, asleep, or busy
+    - coding-26b: ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"]
+    - gemma4:26b-mlx-code: ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"]
+    - ollama/gemma4:26b-mlx-code: ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"]
     - coding-12b: ["google/gemma-4-31b-it"]
     - gemma4:12b-mlx-code: ["google/gemma-4-31b-it"]
     - ollama/gemma4:12b-mlx-code: ["google/gemma-4-31b-it"]
-    - coding-26b: ["google/gemma-4-31b-it"]
-    - gemma4:26b-mlx-code: ["google/gemma-4-31b-it"]
-    - ollama/gemma4:26b-mlx-code: ["google/gemma-4-31b-it"]
     - coding-31b: ["google/gemma-4-31b-it"]
     - gemma4:31b-mlx-code: ["google/gemma-4-31b-it"]
     - ollama/gemma4:31b-mlx-code: ["google/gemma-4-31b-it"]

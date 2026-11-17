@@ -28,3 +28,9 @@ stt:
     base_url: http://192.168.4.5:4000/v1
     api_key: {{ hermes_litellm_api_key | default('sk-hermes-mac-secret') }}
     model: whisper
+
+tts:
+  provider: edge
+  edge:
+    voice: {{ hermes_tts_voice | default('en-US-AriaNeural') }}
+

@@ -32,6 +32,8 @@ services:
       - MODEL_NAME=${HERMES_MODEL:-coding-26b}
       - HERMES_TUI_RPC_TIMEOUT_MS=${HERMES_TUI_RPC_TIMEOUT_MS:-240000}
       - HERMES_STREAM_READ_TIMEOUT=${HERMES_STREAM_READ_TIMEOUT:-240}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GH_TOKEN=${GH_TOKEN:-${GITHUB_TOKEN:-}}
     volumes:
       - /home/shawn/docker/hermes/data:/opt/data
       - /home/shawn/docker:/home/shawn/docker
@@ -64,6 +66,8 @@ services:
       - HOME=/home/hermes
       - HERMES_TUI_RPC_TIMEOUT_MS=${HERMES_TUI_RPC_TIMEOUT_MS:-240000}
       - HERMES_STREAM_READ_TIMEOUT=${HERMES_STREAM_READ_TIMEOUT:-240}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GH_TOKEN=${GH_TOKEN:-${GITHUB_TOKEN:-}}
     volumes:
       - /home/shawn/docker/hermes/data:/home/hermes/workspace
       - /home/shawn/docker:/home/shawn/docker

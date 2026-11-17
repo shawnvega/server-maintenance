@@ -38,6 +38,7 @@ usage() {
   echo "  setup-whisper        Install & configure local Apple Silicon MLX Whisper & LiteLLM"
   echo "  test-hermes          Verify Hermes Gateway, Desktop, TUI grant & LiteLLM connectivity"
   echo "  hermes-shell         Open an interactive terminal inside Hermes container (192.168.4.19)"
+  echo "  hermes-pat           Configure GitHub PAT and git credentials for Hermes (192.168.4.19)"
   echo "  change-password      Change login password on all servers and PiKVM admin"
   echo "  playbook <file.yml>  Run a custom playbook"
   echo "  raw <command>        Run an ad-hoc shell command on all servers"
@@ -97,6 +98,9 @@ case "${CMD}" in
     ;;
   hermes-shell|shell-hermes)
     exec "${SCRIPT_DIR}/scripts/hermes_shell.sh" "$@"
+    ;;
+  hermes-pat|setup-hermes-pat)
+    exec "${SCRIPT_DIR}/scripts/setup_hermes_pat.sh" "$@"
     ;;
 esac
 

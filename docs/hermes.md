@@ -69,18 +69,18 @@ The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.
 * **Routing**:
   * **Chat Completions** (`coding-12b`, `coding-26b`, `coding-31b`): Proxies to Apple Silicon Mac Ollama (`192.168.4.8:11434`) with 128k context bounds.
   * **Speech-to-Text** (`whisper`): Proxies to Apple Silicon Mac MLX Whisper (`192.168.4.8:8080/v1`).
-  * **Cloud Primary & Fallbacks**: Routes `openrouter-free` and `gemma4-26b-free` with automatic failover cascade: Tier 1 Free Cloud (`:free`) -> Tier 2 Paid Cloud (`google/gemma-4-26b-a4b-it`) -> Tier 3 Local Mac (`coding-26b`) -> Tier 4 Universal Cloud Backup (`google/gemma-4-31b-it`).
-  * **Universal Cloud Safety Net**: All local Mac routes (`coding-12b`, `coding-26b`, `coding-31b`) and cloud routes automatically fail over to `google/gemma-4-31b-it` when local hardware is offline or primary cloud endpoints fail.
+  * **Cloud Primary & Fallbacks**: Routes `openrouter-free` and `gemma4-26b-free` with automatic failover cascade: Tier 1 Free Cloud (`:free`) -> Tier 2 Local Mac (`coding-26b`) -> Tier 3 Paid Cloud (`google/gemma-4-26b-a4b-it`) -> Tier 4 Universal Cloud Backup (`google/gemma-4-31b-it`).
+  * **Universal Cloud Safety Net**: All local Mac routes and cloud routes automatically fail over to paid cloud routes (`google/gemma-4-26b-a4b-it` / `google/gemma-4-31b-it`) when local hardware is offline or primary cloud endpoints fail.
 
 #### Model Routing & Fallback Reference Table
 | Model Alias | Backend | Context Bounds | Role & Failover Cascade |
 |---|---|---|---|
-| `openrouter-free` | OpenRouter `openrouter/free` | 131k / 16k | **Default**: Free cloud auto-router. Falls back to `google/gemma-4-26b-a4b-it` -> `coding-26b` -> `google/gemma-4-31b-it`. |
-| `gemma4-26b-free` | OpenRouter `google/gemma-4-26b-a4b-it:free` | 256k / 16k | Free tier direct Gemma 4 26B. Falls back to `google/gemma-4-26b-a4b-it` -> `coding-26b` -> `google/gemma-4-31b-it`. |
+| `openrouter-free` | OpenRouter `openrouter/free` | 131k / 16k | **Default**: Free cloud auto-router. Falls back to `coding-26b` -> `google/gemma-4-26b-a4b-it` -> `google/gemma-4-31b-it`. |
+| `gemma4-26b-free` | OpenRouter `google/gemma-4-26b-a4b-it:free` | 256k / 16k | Free tier direct Gemma 4 26B. Falls back to `coding-26b` -> `google/gemma-4-26b-a4b-it` -> `google/gemma-4-31b-it`. |
 | `google/gemma-4-26b-a4b-it` / `gemma4-26b-paid` | OpenRouter `google/gemma-4-26b-a4b-it` | 256k / 16k | **Paid 26B Route**: High uptime, zero local GPU load. Falls back to `coding-26b` -> `google/gemma-4-31b-it`. |
 | `google/gemma-4-31b-it` / `gemma4-31b-paid` | OpenRouter `google/gemma-4-31b-it` | 256k / 16k | **Universal Cloud Backup**: Dense 31B parameter model serving as the ultimate safety net for all cluster workloads. |
 | `coding-12b` | Mac Ollama `gemma4:12b-mlx-code` | 131k / 16k | Fast interactive edits, local Metal acceleration. Falls back to `google/gemma-4-31b-it` when Mac is offline. |
-| `coding-26b` | Mac Ollama `gemma4:26b-mlx-code` | 131k / 16k | **Local Baseline**: Balanced agentic coding. Falls back to `google/gemma-4-31b-it` when Mac is offline. |
+| `coding-26b` | Mac Ollama `gemma4:26b-mlx-code` | 131k / 16k | **Local Baseline**: Balanced agentic coding. Falls back to `google/gemma-4-26b-a4b-it` -> `google/gemma-4-31b-it` when Mac is offline. |
 | `coding-31b` | Mac Ollama `gemma4:31b-mlx-code` | 131k / 16k | Deep architectural refactoring. Falls back to `google/gemma-4-31b-it` when Mac is offline. |
 | `whisper` / `whisper-1` | Mac MLX Whisper (`:8080/v1`) | Audio STT | Local Metal STT transcription for voice dictation. |
 * **Mac Firewall**: Access from Pi 5 to Mac backends (`11434`, `8080`) is gated by the macOS PF firewall (`/etc/pf.anchors/com.homelab.litellm`), configured via `./scripts/setup_mac_firewall.sh`.
@@ -89,6 +89,37 @@ The cluster runs a centralized **LiteLLM Proxy** Docker container on `192.168.4.
 Local Apple Silicon Metal acceleration on the host Mac (`192.168.4.8`) powers low-latency speech-to-text dictation for Hermes on `192.168.4.19`:
 * **Provisioning**: `./run.sh setup-whisper` runs `scripts/setup_mlx_whisper.sh` to configure the `com.mlx.whisper` LaunchAgent on port `8080`, route transcription through LiteLLM on port `4000`, and run a local self-test.
 * **Documentation**: See [.agents/skills/mlx-whisper/SKILL.md](../.agents/skills/mlx-whisper/SKILL.md) for schemas and troubleshooting.
+
+### Text-to-Speech (TTS) Engine
+Hermes supports native Text-to-Speech across its web interface, CLI, and messaging channels (Telegram/Discord):
+* **Default Engine**: Microsoft Edge Neural TTS (`edge`), configured with `en-US-AriaNeural`.
+* **Zero Host Memory Overhead**: Audio streams directly over HTTPS with no persistent memory footprint (< 15 MB transient buffer), preserving host RAM for Frigate and LLM execution.
+* **Configuration**:
+  ```bash
+  # Check active TTS configuration
+  ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config get tts"
+
+  # Switch voice or provider
+  ssh shawn@192.168.4.19 "docker exec hermes-gateway /opt/hermes/.venv/bin/hermes config set tts.edge.voice en-US-GuyNeural"
+  ```
+
+### GitHub Authentication & PAT Setup
+To enable Hermes to clone, push, create PRs, or interact with GitHub repositories:
+* **Token Type**: Fine-grained Personal Access Token scoped to target repositories (`Contents: Read & write`, `Pull requests: Read & write`).
+* **Interactive Setup**:
+  ```bash
+  ./run.sh hermes-pat
+  ```
+* **Status Check**:
+  ```bash
+  ./run.sh hermes-pat --status
+  ```
+* **Clear Credentials**:
+  ```bash
+  ./run.sh hermes-pat --logout
+  ```
+Credentials persist across container recreations in `/home/shawn/docker/hermes/data/.config/gh/` and `/home/shawn/docker/hermes/data/.gitconfig`.
+
 
 ---
 

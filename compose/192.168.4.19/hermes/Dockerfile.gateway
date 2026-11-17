@@ -37,3 +37,10 @@ ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
 RUN mkdir -p /etc/ssh/ssh_config.d && \
     printf 'Host 192.168.4.18 shawn-candy chromebook\n    HostName 192.168.4.18\n    User shawn\n    IdentityFile /opt/data/.ssh/id_ed25519_hermes\n    IdentitiesOnly yes\n    StrictHostKeyChecking accept-new\n    UserKnownHostsFile /opt/data/.ssh/known_hosts\n\nHost 192.168.4.5 rpi5\n    HostName 192.168.4.5\n    User shawn\n    IdentityFile /opt/data/.ssh/id_ed25519_hermes\n    IdentitiesOnly yes\n    StrictHostKeyChecking accept-new\n    UserKnownHostsFile /opt/data/.ssh/known_hosts\n' > /etc/ssh/ssh_config.d/hermes.conf
 
+# 6. Install edge-tts into the Python virtual environment for native Text-to-Speech
+RUN /opt/hermes/tools/uv-0.13.5-linux-x64/uv pip install --python /opt/hermes/.venv/bin/python edge-tts
+
+# 7. Install pnpm into Hermes tool closure so runtime dependencies stay in sync
+RUN /opt/hermes/.venv/bin/hermes pm install pnpm
+
+
