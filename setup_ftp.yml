@@ -1,0 +1,169 @@
+---
+- name: Configure native vsftpd FTP server on 192.168.4.19 for tinyCam Pro
+  hosts: 192.168.4.19
+  gather_facts: false
+
+  vars:
+    ftp_user: tinycam
+    ftp_root: "/srv/67e597dd-6061-415d-8a37-2246eabee10a/tinycam"
+    ftp_mount: "/srv/67e597dd-6061-415d-8a37-2246eabee10a"
+    ftp_lan_cidr: "192.168.4.0/24"
+    ftp_pasv_min_port: 21100
+    ftp_pasv_max_port: 21110
+    ftp_pasv_address: "192.168.4.19"
+
+  tasks:
+    - name: Ensure remote Ansible tmp directory is owned by SSH user
+      ansible.builtin.file:
+        path: /tmp/.ansible
+        state: directory
+        mode: "0700"
+
+    - name: Load vault variables
+      ansible.builtin.include_vars:
+        file: vars/vault.yml
+
+    - name: Assert vault_ftp_tinycam_password is defined and non-empty
+      ansible.builtin.assert:
+        that:
+          - vault_ftp_tinycam_password is defined
+          - vault_ftp_tinycam_password | length > 0
+        fail_msg: "vault_ftp_tinycam_password must be defined in vars/vault.yml."
+        quiet: true
+
+    - name: Verify local HDD mount is active on 192.168.4.19
+      ansible.builtin.command:
+        cmd: "fgrep -q {{ ftp_mount }} /proc/mounts"
+      register: ftp_mount_check
+      changed_when: false
+      failed_when: ftp_mount_check.rc != 0
+
+    - name: Install vsftpd
+      become: true
+      ansible.builtin.dnf:
+        name: vsftpd
+        state: present
+
+    - name: Ensure /sbin/nologin is listed in /etc/shells for PAM vsftpd auth
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/shells
+        line: /sbin/nologin
+        state: present
+        create: true
+        mode: "0644"
+
+    - name: Ensure dedicated chrooted FTP user exists
+      become: true
+      ansible.builtin.user:
+        name: "{{ ftp_user }}"
+        shell: /sbin/nologin
+        home: "{{ ftp_root }}"
+        create_home: true
+        state: present
+
+    - name: Set password for {{ ftp_user }} via chpasswd
+      become: true
+      ansible.builtin.command:
+        cmd: chpasswd
+        stdin: "{{ ftp_user }}:{{ vault_ftp_tinycam_password }}"
+      no_log: true
+      changed_when: false
+
+    - name: Add shawn to {{ ftp_user }} group for local file management
+      become: true
+      ansible.builtin.user:
+        name: shawn
+        groups: "{{ ftp_user }}"
+        append: true
+
+    - name: Ensure FTP recordings directory has setgid and group-write permissions
+      become: true
+      ansible.builtin.file:
+        path: "{{ ftp_root }}"
+        state: directory
+        owner: "{{ ftp_user }}"
+        group: "{{ ftp_user }}"
+        mode: "2775"
+
+    - name: Configure /etc/vsftpd/vsftpd.conf
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/vsftpd/vsftpd.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          listen=YES
+          listen_ipv6=NO
+          anonymous_enable=NO
+          local_enable=YES
+          write_enable=YES
+          local_umask=002
+          dirmessage_enable=YES
+          use_localtime=YES
+          xferlog_enable=YES
+          connect_from_port_20=YES
+          chroot_local_user=YES
+          allow_writeable_chroot=YES
+          userlist_enable=YES
+          userlist_deny=NO
+          userlist_file=/etc/vsftpd/user_list
+          pam_service_name=vsftpd
+          pasv_enable=YES
+          pasv_min_port={{ ftp_pasv_min_port }}
+          pasv_max_port={{ ftp_pasv_max_port }}
+          pasv_address={{ ftp_pasv_address }}
+      notify: Restart vsftpd
+
+    - name: Restrict FTP access strictly to {{ ftp_user }} in /etc/vsftpd/user_list
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/vsftpd/user_list
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          {{ ftp_user }}
+      notify: Restart vsftpd
+
+    - name: Enable SELinux ftpd_full_access boolean for /srv storage
+      become: true
+      ansible.posix.seboolean:
+        name: ftpd_full_access
+        state: true
+        persistent: true
+
+    - name: Allow FTP control (21) and passive ports from LAN in firewalld
+      become: true
+      ansible.posix.firewalld:
+        rich_rule: "rule family='ipv4' source address='{{ ftp_lan_cidr }}' port port='{{ item }}' protocol='tcp' accept"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop:
+        - "21"
+        - "{{ ftp_pasv_min_port }}-{{ ftp_pasv_max_port }}"
+
+    - name: Flush handlers before verifying service
+      ansible.builtin.meta: flush_handlers
+
+    - name: Ensure vsftpd service is enabled and running
+      become: true
+      ansible.builtin.systemd:
+        name: vsftpd.service
+        enabled: true
+        state: started
+
+    - name: Verify vsftpd is listening on port 21
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 21
+        timeout: 15
+
+  handlers:
+    - name: Restart vsftpd
+      become: true
+      ansible.builtin.systemd:
+        name: vsftpd.service
+        state: restarted

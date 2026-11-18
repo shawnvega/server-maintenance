@@ -35,6 +35,7 @@ usage() {
   echo "  upgrade-host5        Trigger detached standalone maintenance on Host 5 (192.168.4.5)"
   echo "  deploy-automation    Deploy Cockpit systemd services & timers to Pi 5 (192.168.4.5)"
   echo "  setup-vnc            Install & configure Wayland VNC (wayvnc) & 1500x1000 scaling (192.168.4.19)"
+  echo "  setup-ftp            Install & configure native vsftpd FTP server for tinyCam (192.168.4.19)"
   echo "  setup-whisper        Install & configure local Apple Silicon MLX Whisper & LiteLLM"
   echo "  test-hermes          Verify Hermes Gateway, Desktop, TUI grant & LiteLLM connectivity"
   echo "  hermes-shell         Open an interactive terminal inside Hermes container (192.168.4.19)"
@@ -216,6 +217,9 @@ case "${CMD}" in
     ;;
   setup-vnc|vnc)
     exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/setup_vnc.yml" "$@"
+    ;;
+  setup-ftp|ftp)
+    exec "${ANSIBLE_PLAYBOOK[@]}" "${SCRIPT_DIR}/setup_ftp.yml" "$@"
     ;;
   setup-whisper|install-whisper)
     exec "${SCRIPT_DIR}/scripts/setup_mlx_whisper.sh" "$@"
