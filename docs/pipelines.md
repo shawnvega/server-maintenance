@@ -64,7 +64,7 @@ Designed for regular maintenance of standard read/write servers (`192.168.4.4`, 
 
 #### Stage 5: VLC Video Stream (`tags: [vlc, snap, os]`)
 * On `192.168.4.18`, checks if VLC is running (`pgrep -x vlc`).
-* If not running (or if forced via `force_vlc_restart=true`), launches the fullscreen background RTSP stream on `DISPLAY=:0`.
+* If not running (or if forced via `force_vlc_restart=true`), launches the fullscreen background RTSP stream on `DISPLAY=:0` using `vlc_stream_url` (stored encrypted in `host_vars/192.168.4.18.yml`, pointing to TinyCam Pro on `192.168.4.15:8083`) and `vlc_stream_options` (`--fullscreen --rtsp-tcp --extraintf http --http-port 8080 ...`).
 
 #### Stage 6: Safe Automated Reboot (`tags: [reboot]`)
 * Checks if a reboot is pending (`/var/run/reboot-required` on Debian or `needs-restarting -r` on Fedora).
@@ -183,10 +183,14 @@ Ansible tags allow targeted execution of specific pipeline stages without runnin
 
 ### 3. VLC RTSP Video Stream Recovery (`192.168.4.18`)
 * **Symptoms**: Fullscreen camera monitor stream on Chromebook display is frozen or closed.
+* **Architecture Note**: `vlc_stream_url` is stored encrypted in `host_vars/192.168.4.18.yml` (streaming `camera=1` from TinyCam Pro on `192.168.4.15:8083`). On `192.168.4.18`, a cron watchdog (`*/5 * * * * /home/shawn/maintain_stream.sh`) also monitors and restarts VLC; if changing the stream URL, update both `host_vars/192.168.4.18.yml` and `/home/shawn/maintain_stream.sh` on `.18`.
 * **Investigation & Restart**:
   ```bash
   # Restart stream via dedicated runner shortcut
   ./run.sh restart-vlc
+
+  # Edit encrypted stream URL if needed
+  .venv/bin/ansible-vault edit host_vars/192.168.4.18.yml --vault-password-file .vault_pass
 
   # If display errors occur, ensure X11 display session :0 is active
   ssh shawn@192.168.4.18 'DISPLAY=:0 xrandr'

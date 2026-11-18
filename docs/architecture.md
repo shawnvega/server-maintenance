@@ -37,6 +37,7 @@ This document details the hardware, network topology, operating systems, storage
   * RAM (`tmpfs`): Fast volatile storage mounted at `/tmp`.
   * External 3-Device Btrfs Pool: Dedicated Btrfs RAID 1 (`-d raid1 -m raid1`, `compress=zstd:3,noatime,nofail`) mounted on `/var` across `/dev/sda` (7.6 GB USB microSD reader), `/dev/sdb` (7.5 GB USB thumb drive), and `/dev/sdc` (59.5 GB SD card).
 * **Automation**: Partitioning, formatting, data migration, and fstab updates are automated via `migrate_var_btrfs.yml`. See [storage-btrfs.md](storage-btrfs.md) for details.
+* **Persistent Camera Display**: Runs `snap` VLC fullscreen on `DISPLAY=:0`, streaming the Reolink front doorbell from TinyCam Pro (`192.168.4.15:8083`). `vlc_stream_url` is stored encrypted in `host_vars/192.168.4.18.yml`, and a local cron watchdog (`/home/shawn/maintain_stream.sh`) monitors the stream.
 
 ### 4. Homepage Dashboard & Reverse Proxy (`192.168.4.5`)
 * **Ingress**: Native Caddy terminates port `80` (`http://192.168.4.5`) and proxies to Homepage (`127.0.0.1:3001`), providing tiles and Glances metrics for Core Infrastructure, Automation & AI, Media & Storage, and Monitoring.
