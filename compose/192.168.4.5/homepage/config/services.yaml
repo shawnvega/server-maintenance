@@ -134,3 +134,8 @@
         href: https://192.168.4.19:8971
         description: Camera Object Detection (Fedora)
         ping: 192.168.4.19
+    - TinyCam Pro:
+        icon: mdi-cctv
+        href: http://192.168.4.15:8083/
+        description: IP Camera Web Server (Pixel 5)
+        ping: 192.168.4.15
