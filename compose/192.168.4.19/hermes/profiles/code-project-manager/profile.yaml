@@ -1,0 +1,4 @@
+description: Kanban project manager that triages, specifies, prioritizes, and unblocks
+  development tasks (triage, todo, scheduled, ready, blocked). Does not write or
+  review code.
+description_auto: false

@@ -1,0 +1,5 @@
+description: Independent code reviewer for completed tasks in the review column;
+  verifies acceptance criteria and tests, then approves, requests changes, or blocks.
+  Only used for the review lane — do not assign standalone implementation or review
+  cards to this profile.
+description_auto: false
