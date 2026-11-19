@@ -10,11 +10,12 @@ Host `192.168.4.19` (Fedora Linux 43 x86_64, Btrfs root) runs a dual-container a
 
 | Container | Port | Role & Image | Resource Allocation |
 |---|---|---|---|
-| **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 1.5`, `mem_limit: 4096m`, `mem_reservation: 1024m` |
+| **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 2.5`, `mem_limit: 5120m`, `mem_reservation: 1024m` |
 | **`hermes-desktop`** | `6081` (HTTP/VNC, `desktop` profile) | Optional unprivileged sandbox for browser/UI automation (`hermes-desktop:minimal`): `Xvfb` (:1, 1280x800), `openbox`, `chromium` (`--no-sandbox`), `noVNC` | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 | **`open-webui`** | `3000` (HTTP WebUI) | Feature-rich AI chat interface connected to Hermes Agent (`:8642`) and LiteLLM (`:4000`) (`ghcr.io/open-webui/open-webui:main`) | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 
-* **Co-located Workload**: Frigate NVR (Coral TPU + `/dev/dri/renderD128` Intel VAAPI transcoding) shares the host. Resource limits preserve ~4GB RAM for Fedora and Frigate.
+* **Host Headroom**: Container resource limits preserve ~3GB RAM for the Fedora host, desktop services, and `open-webui`.
+* **Android / Gradle Build Defaults**: `Dockerfile.gateway` pre-installs OpenJDK 21, Gradle 8.12.1, and Kotlin 2.1.10 with `GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=384m\""` to keep Android builds comfortably within the `5120m` container limit.
 * **Shared Storage**: Host directory `/home/shawn/docker/hermes/data` is mounted to `/opt/data` in `hermes-gateway` and `/home/hermes/workspace` in `hermes-desktop`.
 
 ---
@@ -93,7 +94,7 @@ Local Apple Silicon Metal acceleration on the host Mac (`192.168.4.8`) powers lo
 ### Text-to-Speech (TTS) Engine
 Hermes supports native Text-to-Speech across its web interface, CLI, and messaging channels (Telegram/Discord):
 * **Default Engine**: Microsoft Edge Neural TTS (`edge`), configured with `en-US-AriaNeural`.
-* **Zero Host Memory Overhead**: Audio streams directly over HTTPS with no persistent memory footprint (< 15 MB transient buffer), preserving host RAM for Frigate and LLM execution.
+* **Zero Host Memory Overhead**: Audio streams directly over HTTPS with no persistent memory footprint (< 15 MB transient buffer), preserving host RAM for LLM execution and container workloads.
 * **Configuration**:
   ```bash
   # Check active TTS configuration

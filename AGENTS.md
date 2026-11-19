@@ -9,7 +9,7 @@ This repository manages automation and configuration for self-hosted home server
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `frigate` (`:8971`), `hermes` (gateway `:9119`, API server `:8642`, optional desktop `:6081`), `open-webui` (`:3000`), host `wayvnc`/`noVNC` (`:5900`/`:6080`) |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `hermes` (gateway `:9119`, API server `:8642`, optional desktop `:6081`), `open-webui` (`:3000`), host `wayvnc`/`noVNC` (`:5900`/`:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
 | `192.168.4.15` | `u0_a287` | Android (Termux / PRoot Debian) | None | Read/Write | Hermes Agent (dashboard `:9119`), `faster-whisper` (`:8081`), `esphome` / `esphome-builder` (`:6055`), Termux OpenSSH (`:8022`) |

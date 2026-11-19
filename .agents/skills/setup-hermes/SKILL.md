@@ -40,12 +40,11 @@ When encountering issues, locate your symptom below for the instant verified fix
 * **Host Machine (`192.168.4.19`)**:
   * OS: Fedora Linux 43 x86_64, Btrfs root.
   * Hardware: Intel Core i5-8200Y (2 cores / 4 threads), 8GB RAM.
-  * Co-located workload: Frigate NVR (Coral TPU + `/dev/dri/renderD128` Intel VAAPI transcoding).
   * **Resource Allocation**:
-    * `hermes-gateway`: `mem_limit: 4096m`, `mem_reservation: 1024m`, `cpus: 1.5`.
+    * `hermes-gateway`: `mem_limit: 5120m`, `mem_reservation: 1024m`, `cpus: 2.5`.
     * `hermes-desktop`: `mem_limit: 1536m`, `mem_reservation: 512m`, `cpus: 1.0`.
     * `open-webui`: `mem_limit: 1536m`, `mem_reservation: 512m`, `cpus: 1.0`.
-    * Preserves ~3.5GB RAM for Fedora system overhead and Frigate NVR.
+    * Preserves ~3GB RAM for Fedora system overhead and desktop services.
 * **Hermes & WebUI Stack (`compose/192.168.4.19/`)**:
   * **`hermes-gateway`** (Ports **`9119`** WebUI & **`8642`** OpenAI API): Core agent runtime, tool execution engine, session store, authenticated REST/WebSocket dashboard, and native OpenAI-compatible API server (`hermes-gateway:custom`).
   * **`hermes-desktop`** (Port **`6081`**, optional `desktop` profile): Sandboxed virtual desktop (`hermes-desktop:minimal`) running `Xvfb` (display `:1`, 1280x800 24-bit TrueColor), `openbox`, `lxterminal`, `chromium` (`--no-sandbox`), and `noVNC` via `websockify`.

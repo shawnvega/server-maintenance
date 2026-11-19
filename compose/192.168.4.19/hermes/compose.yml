@@ -8,9 +8,9 @@ services:
     restart: unless-stopped
     command: ["gateway", "run"]
     shm_size: "1gb"
-    mem_limit: 4096m
+    mem_limit: 5120m
     mem_reservation: 1024m
-    cpus: 1.5
+    cpus: 2.5
     ports:
       - "9119:9119"
       - "8642:8642"

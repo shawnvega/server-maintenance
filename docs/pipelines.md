@@ -155,7 +155,7 @@ Ansible tags allow targeted execution of specific pipeline stages without runnin
   ```bash
   ./run.sh raw 'ps aux --sort=-%cpu | head -n 10'
   ```
-  * On `192.168.4.19`: Check Frigate camera ingestion or Hermes model inference.
+  * On `192.168.4.19`: Check Hermes model inference or container workloads.
   * On `192.168.4.4` / `.5`: Check Immich machine learning transcode or indexing jobs.
 * **Mitigation & Overrides**: If high load is expected batch background processing:
   ```bash

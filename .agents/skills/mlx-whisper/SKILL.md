@@ -24,7 +24,7 @@ flowchart LR
 
 * **Local Inference**: Uses Apple's `mlx-whisper` running natively on Apple Silicon with unified memory and GPU/ANE acceleration.
 * **OpenAI-Compatible Wire API**: Exposes `POST /v1/audio/transcriptions` via a FastAPI daemon running under macOS LaunchAgent `com.mlx.whisper`.
-* **Zero Host CPU Burden**: Fedora node `.19` (Intel Core i5-8200Y) delegates all audio processing to the Mac, preserving CPU and RAM for Frigate NVR and agent execution.
+* **Zero Host CPU Burden**: Fedora node `.19` (Intel Core i5-8200Y) delegates all audio processing to the Mac, preserving CPU and RAM for agent execution and builds.
 * **Unified Security & Ports**: Hermes talks only to LiteLLM on port `4000` using the existing Bearer token `sk-hermes-mac-secret`.
 
 ---

@@ -118,7 +118,7 @@ else
   exit 1
 fi
 
-# 3. Host System Resources & Co-existence with Frigate
+# 3. Host System Resources & Headroom
 info "3. Inspecting Host Hardware & Resource Headroom..."
 SYS_METRICS=$(ssh -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" '
   LOAD=$(awk "{print \$1}" /proc/loadavg)
@@ -133,11 +133,11 @@ if [[ -n "${H_LOAD}" ]]; then
   if (( $(echo "${H_LOAD} < 4.0" | bc -l 2>/dev/null || [ "${H_LOAD%.*}" -lt 4 ]) )); then
     pass "Host load average (${H_LOAD}) is within safe threshold (< 4.0)"
   else
-    warn "Host load average is high (${H_LOAD})" "Check Frigate NVR or active container tasks"
+    warn "Host load average is high (${H_LOAD})" "Check active container or build tasks"
   fi
 
   if [[ "${H_AVAIL}" -gt 1024 ]]; then
-    pass "Available memory (${H_AVAIL}MB) is adequate for Hermes + Frigate"
+    pass "Available memory (${H_AVAIL}MB) is adequate for Hermes"
   else
     warn "Available memory is low (${H_AVAIL}MB)" "Monitor for OOM events: dmesg -T | grep -i oom"
   fi

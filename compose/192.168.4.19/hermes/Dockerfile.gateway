@@ -31,7 +31,7 @@ RUN curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_
 
 # 4. Set Java environment variables and safe default Gradle memory limits
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
-    GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx1024m -XX:MaxMetaspaceSize=256m\""
+    GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=384m\""
 
 # 5. Pre-configure system-wide SSH client defaults for cluster nodes
 RUN mkdir -p /etc/ssh/ssh_config.d && \
