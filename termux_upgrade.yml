@@ -38,7 +38,7 @@
     - name: Post-upgrade verification - check services
       tags: [verify]
       ansible.builtin.shell:
-        cmd: 'bash -lc "sv status sshd hermes-dashboard faster-whisper esphome-builder"'
+        cmd: 'bash -lc "sv status sshd hermes-dashboard faster-whisper esphome-builder glances"'
       register: sv_status
       changed_when: false
 

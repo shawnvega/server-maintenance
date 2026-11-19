@@ -133,6 +133,23 @@
           url: http://192.168.4.11:61208
           version: 4
           metric: cpu
+    - Glances Pixel 5:
+        icon: glances.png
+        href: http://192.168.4.15:61208
+        description: Android Termux & PRoot Metrics (Pixel 5)
+        widget:
+          type: customapi
+          url: http://192.168.4.15:61208/api/4/load
+          mappings:
+            - field: min1
+              label: 1m Load
+              format: float
+            - field: min5
+              label: 5m Load
+              format: float
+            - field: min15
+              label: 15m Load
+              format: float
     - Frigate NVR:
         icon: frigate.png
         href: https://192.168.4.19:8971

@@ -27,7 +27,7 @@ proot-distro login debian -- bash -c "
 "
 
 # 3. Workload Python Virtual Environments
-log "Step 3: Upgrading Python workloads (ESPHome, Device Builder, Hermes, faster-whisper)..."
+log "Step 3: Upgrading Python workloads (ESPHome, Device Builder, Hermes, faster-whisper, Glances)..."
 proot-distro login debian -- bash -c "
   echo '--> Upgrading ESPHome & ESPHome Device Builder...'
   if [ -d /opt/esphome ]; then
@@ -49,6 +49,13 @@ proot-distro login debian -- bash -c "
   else
     echo '/opt/faster-whisper does not exist, skipping'
   fi
+
+  echo '--> Upgrading Glances...'
+  if [ -d /opt/glances ]; then
+    /opt/glances/bin/pip install -U 'glances[web]'
+  else
+    echo '/opt/glances does not exist, skipping'
+  fi
 "
 
 # 4. Service Restarts
@@ -66,6 +73,11 @@ fi
 if [ -d "$SVDIR/esphome-builder" ]; then
   echo "Restarting esphome-builder..."
   sv force-restart esphome-builder || sv restart esphome-builder || true
+fi
+
+if [ -d "$SVDIR/glances" ]; then
+  echo "Restarting glances..."
+  sv force-restart glances || sv restart glances || true
 fi
 
 # Allow services 4 seconds to re-bind
@@ -100,6 +112,9 @@ curl -s -o /dev/null -w "Dashboard HTTP Code: %{http_code}\n" http://127.0.0.1:9
 
 echo -e "\n--- esphome-builder Port 6055 Check ---"
 nc -z 127.0.0.1 6055 && echo "Port 6055 listening [OK]" || echo "Port 6055 unreachable [FAIL]"
+
+echo -e "\n--- Glances Web/API Check ---"
+curl -fsS -o /dev/null http://127.0.0.1:61208/api/4/cpu && echo "Glances API v4 (:61208) [OK]" || echo "Glances API v4 (:61208) [FAIL]"
 
 echo -e "\n--- Termux Services Status ---"
 sv status "$SVDIR"/*
