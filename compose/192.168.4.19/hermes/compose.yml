@@ -36,6 +36,7 @@ services:
       - GH_TOKEN=${GH_TOKEN:-${GITHUB_TOKEN:-}}
     volumes:
       - /home/shawn/docker/hermes/data:/opt/data
+      - /home/shawn/docker/hermes/data/.gemini:/home/hermes/.gemini
       - /home/shawn/docker:/home/shawn/docker
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro

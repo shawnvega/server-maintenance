@@ -10,6 +10,14 @@
         file: vars/vault.yml
       failed_when: false
 
+    - name: Ensure persistent .gemini directory exists for Hermes agy CLI
+      ansible.builtin.file:
+        path: /home/shawn/docker/hermes/data/.gemini
+        state: directory
+        owner: shawn
+        group: shawn
+        mode: "0700"
+
     - name: Deploy and restart Hermes stack
       ansible.builtin.include_tasks: tasks/restart_docker_stack.yml
 
