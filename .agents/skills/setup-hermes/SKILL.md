@@ -213,6 +213,19 @@ If debugging a specific component manually:
 .venv/bin/ansible 192.168.4.19 -m command -a "docker restart hermes-gateway"
 ```
 
+#### E. Kanban Board & Profile Diagnostics
+* **Profile `state.db` Location**: Profile-scoped Kanban workers (`coder`, `reviewer`, `code-project-manager`) record sessions in `/opt/data/profiles/<profile>/state.db`, **not** `/opt/data/state.db`.
+* **Safe Task Mutations**: Always use `hermes kanban` CLI (`list`, `show`, `edit`, `reclaim`, `set-model`) as `-u hermes` inside `hermes-gateway`:
+  ```bash
+  # Inspect task status and runs
+  ssh shawn@192.168.4.19 "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes kanban show <task_id>"
+
+  # Reclaim a stalled running task and stop lingering worker PIDs
+  ssh shawn@192.168.4.19 "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes kanban reclaim <task_id> --reason 'manual restart'"
+  ```
+* **SQLite Inspection Over SSH**: Pipe Python via stdin (`<<'EOF'`) to avoid shell-quoting issues when querying `kanban.db` or `profiles/<profile>/state.db`.
+* **Profile `SOUL.md` vs. Repo `AGENTS.md`**: Keep `compose/192.168.4.19/hermes/profiles/*/SOUL.md` language-agnostic and sync live edits to `/home/shawn/docker/hermes/data/profiles/<profile>/SOUL.md` on `192.168.4.19`; put repo/toolchain flags (e.g., quiet Gradle flags) in the target project's `AGENTS.md`.
+
 ---
 
 ## 3. Client Access Endpoints

@@ -34,3 +34,9 @@ tts:
   edge:
     voice: {{ hermes_tts_voice | default('en-US-AriaNeural') }}
 
+compression:
+  enabled: true
+  threshold_tokens: 65536
+  tail_mode: lean
+  protect_last_n: 12
+
