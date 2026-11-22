@@ -21,6 +21,36 @@
     - name: Deploy and restart Hermes stack
       ansible.builtin.include_tasks: tasks/restart_docker_stack.yml
 
+    - name: Ensure rtk-rewrite plugin is installed and enabled for default profile
+      ansible.builtin.command:
+        cmd: "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes plugins install --yes-deps --enable rtk-rewrite"
+      args:
+        creates: /home/shawn/docker/hermes/data/plugins/rtk-rewrite
+
+    - name: Check if Hermes profiles directory exists
+      ansible.builtin.stat:
+        path: /home/shawn/docker/hermes/data/profiles
+      register: hermes_profiles_dir
+
+    - name: Discover existing Hermes profiles
+      ansible.builtin.find:
+        paths: /home/shawn/docker/hermes/data/profiles
+        file_type: directory
+        recurse: false
+        excludes:
+          - ".deleted"
+      register: hermes_profiles
+      when: hermes_profiles_dir.stat.exists and hermes_profiles_dir.stat.isdir
+
+    - name: Ensure rtk-rewrite plugin is installed and enabled for each profile
+      ansible.builtin.command:
+        cmd: "docker exec -u hermes hermes-gateway /opt/hermes/.venv/bin/hermes -p {{ item.path | basename }} plugins install --yes-deps --enable rtk-rewrite"
+      args:
+        creates: "{{ item.path }}/plugins/rtk-rewrite"
+      loop: "{{ hermes_profiles.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
 - name: Authorize Hermes Agent SSH key on cluster targets
   hosts: 192.168.4.18
   gather_facts: false

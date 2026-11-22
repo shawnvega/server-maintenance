@@ -48,4 +48,9 @@ RUN curl -fsSL https://antigravity.google/cli/install.sh | bash \
     && AGY_BIN="$(command -v agy || echo /root/.local/bin/agy)" \
     && install -m 0755 "$AGY_BIN" /usr/local/bin/agy
 
+# 9. Install RTK (Rust Token Killer) and expose on system PATH
+RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh \
+    && RTK_BIN="$(command -v rtk || echo /root/.local/bin/rtk)" \
+    && install -m 0755 "$RTK_BIN" /usr/local/bin/rtk
+
 
