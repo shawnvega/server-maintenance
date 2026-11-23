@@ -11,12 +11,20 @@ https://192.168.4.5 {
 }
 
 immich.vvvega.com {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
 	reverse_proxy 192.168.4.4:2283 {
 		header_up Host {host}
 	}
 }
 
 hermes.vvvega.com {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
 	@blocked not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48 192.168.4.0/24 127.0.0.1 ::1
 	respond @blocked "403 Forbidden - Tailscale or LAN connection required" 403 {
 		close
@@ -28,6 +36,10 @@ hermes.vvvega.com {
 }
 
 www.vvvega.com {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
 	respond "503 Service Unavailable - WordPress decommissioned" 503 {
 		close
 	}

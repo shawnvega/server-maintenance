@@ -17,10 +17,12 @@ Host `192.168.4.5` runs Caddy natively as a systemd service (`caddy.service`), p
   | `immich.vvvega.com` | `http://192.168.4.4:2283` | Immich photo & video server |
   | `hermes.vvvega.com` | `http://192.168.4.19:9119` | Hermes Gateway Web UI & WebSocket (restricted to Tailscale `100.64.0.0/10` & LAN `192.168.4.0/24`; public IPs receive `403`) |
   | `www.vvvega.com` | `503 Service Unavailable` | Static decommission response (WordPress removed) |
-* **Validation & Zero-Downtime Reload**:
-  1. Copies `files/caddy/Caddyfile` to `/etc/caddy/Caddyfile` on the host.
-  2. Runs `caddy validate --config /etc/caddy/Caddyfile` before applying. If validation fails, Ansible halts without interrupting traffic.
-  3. Executes `systemctl reload caddy` for zero-downtime reconfiguration.
+* **Validation, Cloudflare DNS-01 & Zero-Downtime Reload**:
+  1. Loads `vault_cloudflare_api_token` from `vars/vault.yml` and writes it to `/etc/caddy/caddy.env` (`0640` `root:caddy`), loaded via `/etc/systemd/system/caddy.service.d/cloudflare.conf`.
+  2. Installs the official `linux/arm64` Caddy binary compiled with `github.com/caddy-dns/cloudflare` and pins `/usr/bin/caddy` via `dpkg-divert` (`/usr/bin/caddy.distrib`) so `apt upgrade` never overwrites the DNS-01 plugin.
+  3. Copies `files/caddy/Caddyfile` to `/etc/caddy/Caddyfile` on the host.
+  4. Runs `caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile` before applying. If validation fails, Ansible halts without interrupting traffic.
+  5. Executes `systemctl reload caddy` for zero-downtime reconfiguration.
 
 ### Commands
 ```bash
@@ -46,11 +48,12 @@ Host `192.168.4.5` runs automated Ansible maintenance schedules natively via sys
 | Service / Timer Unit | Action / Playbook | Default Schedule | Description |
 |---|---|---|---|
 | `ansible-backup-data.timer` | `./run.sh backup-data` | Daily `02:00` | Syncs Immich database, photos, and shares from Host 4 to Host 5. |
+| `ansible-backup-hermes.timer` | `./run.sh backup-hermes` | Daily `02:30` | Syncs Hermes agent snapshot from Host 19 to Host 5. |
+| `ansible-upgrade-all.timer` | `./run.sh upgrade-all` | Daily `04:00` | Nightly full concurrent cluster upgrade (also triggerable on-demand). |
 | `ansible-check-btrfs.timer` | `./run.sh check-btrfs` | Daily `06:00` | Audits Btrfs pools across `.4`, `.5`, `.18`, `.19` for errors. |
 | `ansible-backup-rpi.timer` | `./run.sh backup` | Sunday `03:00` | Runs `rpi-clone` bootable SD card mirror backups. |
-| `ansible-cleanup.timer` | `./run.sh cleanup` | Sunday `04:00` | Vacuums system journals, cleans apt/dnf caches, and prunes Docker. |
+| `ansible-cleanup.timer` | `./run.sh cleanup` | Sunday `05:00` | Vacuums system journals, cleans apt/dnf caches, and prunes Docker. |
 | `ansible-scrub-btrfs.timer` | `./run.sh scrub-btrfs --all` | 1st Sat `01:00` | Monthly Btrfs filesystem scrub for silent bit-rot repair. |
-| `ansible-upgrade-all.timer` | `./run.sh upgrade-all` | Monday `01:00` | Weekly full concurrent cluster upgrade (also triggerable on-demand). |
 
 ### Deployment & Management Commands
 ```bash

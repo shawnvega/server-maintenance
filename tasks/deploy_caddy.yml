@@ -1,4 +1,117 @@
 ---
+- name: Load vault variables for Caddy
+  tags: [caddy, proxy]
+  ansible.builtin.include_vars:
+    file: vars/vault.yml
+
+- name: Assert vault_cloudflare_api_token is defined in vars/vault.yml
+  tags: [caddy, proxy]
+  ansible.builtin.assert:
+    that:
+      - vault_cloudflare_api_token is defined
+      - (vault_cloudflare_api_token | trim | length) > 0
+    fail_msg: >-
+      vault_cloudflare_api_token is missing in vars/vault.yml!
+      Add it via: .venv/bin/ansible-vault edit vars/vault.yml --vault-password-file .vault_pass
+    quiet: true
+
+- name: Check if Caddy has the dns.providers.cloudflare module installed
+  tags: [caddy, proxy]
+  ansible.builtin.shell:
+    cmd: "caddy list-modules 2>/dev/null | grep -q '^dns.providers.cloudflare$'"
+  register: caddy_cf_module_check
+  changed_when: false
+  failed_when: false
+
+- name: Check if dpkg-divert is active for /usr/bin/caddy
+  tags: [caddy, proxy]
+  ansible.builtin.command:
+    cmd: dpkg-divert --list /usr/bin/caddy
+  register: caddy_divert_check
+  changed_when: false
+
+- name: Divert packaged /usr/bin/caddy to /usr/bin/caddy.distrib so apt upgrades preserve custom build
+  tags: [caddy, proxy]
+  when: "'/usr/bin/caddy' not in caddy_divert_check.stdout"
+  become: true
+  ansible.builtin.command:
+    cmd: dpkg-divert --divert /usr/bin/caddy.distrib --rename --add /usr/bin/caddy
+
+- name: Download official arm64 Caddy binary with github.com/caddy-dns/cloudflare plugin
+  tags: [caddy, proxy]
+  when: caddy_cf_module_check.rc != 0
+  become: true
+  ansible.builtin.get_url:
+    url: "https://caddyserver.com/api/download?os=linux&arch=arm64&p=github.com%2Fcaddy-dns%2Fcloudflare"
+    dest: /usr/bin/caddy
+    owner: root
+    group: root
+    mode: '0755'
+    force: true
+    timeout: 120
+  register: caddy_binary_download
+
+- name: Verify custom Caddy binary includes dns.providers.cloudflare
+  tags: [caddy, proxy]
+  when: caddy_cf_module_check.rc != 0
+  ansible.builtin.shell:
+    cmd: "caddy list-modules | grep -q '^dns.providers.cloudflare$'"
+  changed_when: false
+
+- name: Write Cloudflare API token to /etc/caddy/caddy.env
+  tags: [caddy, proxy]
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/caddy/caddy.env
+    owner: root
+    group: caddy
+    mode: '0640'
+    content: |
+      CF_API_TOKEN={{ vault_cloudflare_api_token | trim }}
+  no_log: true
+  register: caddy_env_file
+
+- name: Ensure caddy.service systemd drop-in directory exists
+  tags: [caddy, proxy]
+  become: true
+  ansible.builtin.file:
+    path: /etc/systemd/system/caddy.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure caddy.service to load /etc/caddy/caddy.env
+  tags: [caddy, proxy]
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/caddy.service.d/cloudflare.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Service]
+      EnvironmentFile=/etc/caddy/caddy.env
+  register: caddy_systemd_dropin
+
+- name: Reload systemd daemon if Caddy drop-in changed
+  tags: [caddy, proxy]
+  when: caddy_systemd_dropin.changed
+  become: true
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart Caddy if binary, token, or systemd drop-in changed
+  tags: [caddy, proxy]
+  when:
+    - (caddy_binary_download is defined and (caddy_binary_download.changed | default(false)))
+      or (caddy_env_file is defined and (caddy_env_file.changed | default(false)))
+      or (caddy_systemd_dropin is defined and (caddy_systemd_dropin.changed | default(false)))
+  become: true
+  ansible.builtin.systemd:
+    name: caddy
+    state: restarted
+
 - name: Deploy Caddyfile configuration
   tags: [caddy, proxy]
   become: true
@@ -8,7 +121,7 @@
     owner: root
     group: root
     mode: '0644'
-    validate: 'caddy validate --adapter caddyfile --config %s'
+    validate: 'caddy validate --adapter caddyfile --envfile /etc/caddy/caddy.env --config %s'
   notify: Reload Caddy
 
 - name: Ensure Caddy service is running and enabled
