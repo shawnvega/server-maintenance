@@ -16,6 +16,12 @@ immich.vvvega.com {
 	}
 }
 
+hermes.vvvega.com {
+	reverse_proxy 192.168.4.19:9119 {
+		header_up Host {host}
+	}
+}
+
 www.vvvega.com {
 	respond "503 Service Unavailable - WordPress decommissioned" 503 {
 		close

@@ -1,11 +1,17 @@
 ---
 - name: Manage Caddy reverse proxy on Raspberry Pi 5
   hosts: 192.168.4.5
-  become: true
   gather_facts: true
 
   tasks:
+    - name: Ensure remote Ansible tmp directory is owned by SSH user
+      ansible.builtin.file:
+        path: /tmp/.ansible
+        state: directory
+        mode: '0700'
+
     - name: Ensure Caddy package is installed
+      become: true
       ansible.builtin.apt:
         name: caddy
         state: present
@@ -16,6 +22,7 @@
 
   handlers:
     - name: Reload Caddy
+      become: true
       ansible.builtin.systemd:
         name: caddy
         state: reloaded

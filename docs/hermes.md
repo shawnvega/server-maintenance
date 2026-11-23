@@ -178,7 +178,7 @@ Verifies gateway bootstrap grant, LiteLLM model listing, test inference completi
 |---|---|---|---|
 | **Open-WebUI Dashboard** | `http://192.168.4.19:3000/` | Initial admin onboarding | Full-featured ChatGPT-style interface with `hermes-agent` and LiteLLM models |
 | **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer token (`API_SERVER_KEY`) | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
-| **Hermes Gateway Web UI** | `http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace |
+| **Hermes Gateway Web UI** | `http://192.168.4.19:9119/`<br>`https://hermes.vvvega.com/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace (proxied via Caddy on `.5`) |
 | **Hermes Virtual Desktop** | `http://192.168.4.19:6081/` | None (sandboxed, `desktop` profile) | noVNC graphical browser/desktop environment |
 | **macOS Native App** | `/Applications/Hermes.app` | Gateway URL: `http://192.168.4.19:9119` | Remote gateway client |
 
