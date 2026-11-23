@@ -15,7 +15,7 @@ Host `192.168.4.5` runs Caddy natively as a systemd service (`caddy.service`), p
   |---|---|---|
   | `http://192.168.4.5` | `http://127.0.0.1:3001` | Homepage homelab dashboard |
   | `immich.vvvega.com` | `http://192.168.4.4:2283` | Immich photo & video server |
-  | `hermes.vvvega.com` | `http://192.168.4.19:9119` | Hermes Gateway Web UI & WebSocket |
+  | `hermes.vvvega.com` | `http://192.168.4.19:9119` | Hermes Gateway Web UI & WebSocket (restricted to Tailscale `100.64.0.0/10` & LAN `192.168.4.0/24`; public IPs receive `403`) |
   | `www.vvvega.com` | `503 Service Unavailable` | Static decommission response (WordPress removed) |
 * **Validation & Zero-Downtime Reload**:
   1. Copies `files/caddy/Caddyfile` to `/etc/caddy/Caddyfile` on the host.
