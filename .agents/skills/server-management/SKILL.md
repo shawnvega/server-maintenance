@@ -81,7 +81,7 @@ Operational runbooks and safety guardrails for managing the self-hosted cluster 
 ```
 
 ### D. Host 5 (`192.168.4.5`) Standalone Maintenance & Cockpit Automation
-Scheduled tasks (`ansible-backup-data`, `ansible-check-btrfs`, `ansible-cleanup`, `ansible-backup-rpi`, `ansible-scrub-btrfs`) run as native systemd timers on Pi 5 and are monitored via **Cockpit (`:9090`)**. On-demand master upgrades can be triggered in Cockpit via `ansible-upgrade-all.service`.
+Scheduled tasks (`ansible-backup-data`, `ansible-backup-hermes`, `ansible-upgrade-all` nightly at 04:00, `ansible-check-btrfs`, `ansible-cleanup`, `ansible-backup-rpi`, `ansible-scrub-btrfs`) run as native systemd timers on Pi 5 and are monitored via **Cockpit (`:9090`)**. On-demand master upgrades can also be triggered in Cockpit via `ansible-upgrade-all.service`.
 ```bash
 ./run.sh deploy-automation                         # Deploy/update Cockpit systemd timers & services
 ./run.sh check-host5                               # Inspect ~/logs/upgrade_host5.status

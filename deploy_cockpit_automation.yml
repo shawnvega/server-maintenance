@@ -1,7 +1,6 @@
 ---
 - name: Deploy Cockpit Ansible Automation Services and Timers to Raspberry Pi 5
   hosts: 192.168.4.5
-  become: true
   gather_facts: true
 
   vars:
@@ -30,7 +29,7 @@
       - name: ansible-cleanup
         description: "Ansible Weekly Cluster Disk Cleanup & Docker Prune"
         command: "/home/shawn/server-maintenance/run.sh cleanup"
-        schedule: "Sun *-*-* 04:00:00"
+        schedule: "Sun *-*-* 05:00:00"
         has_timer: true
 
       - name: ansible-backup-rpi
@@ -48,11 +47,18 @@
       - name: ansible-upgrade-all
         description: "Ansible Master Cluster Upgrade"
         command: "/home/shawn/server-maintenance/run.sh upgrade-all"
-        schedule: "Mon *-*-* 01:00:00"
+        schedule: "*-*-* 04:00:00"
         has_timer: true
 
   tasks:
+    - name: Ensure remote Ansible tmp directory is owned by SSH user
+      ansible.builtin.file:
+        path: /tmp/.ansible
+        state: directory
+        mode: "0700"
+
     - name: Ensure required system packages are present
+      become: true
       ansible.builtin.apt:
         name:
           - git
@@ -63,6 +69,7 @@
         update_cache: false
 
     - name: Deploy systemd service units for Ansible tasks
+      become: true
       ansible.builtin.template:
         src: templates/systemd/ansible-job.service.j2
         dest: "/etc/systemd/system/{{ item.name }}.service"
@@ -72,6 +79,7 @@
       loop: "{{ ansible_tasks }}"
 
     - name: Deploy systemd timer units for scheduled Ansible tasks
+      become: true
       ansible.builtin.template:
         src: templates/systemd/ansible-job.timer.j2
         dest: "/etc/systemd/system/{{ item.name }}.timer"
@@ -82,10 +90,12 @@
       when: item.has_timer | bool
 
     - name: Reload systemd configuration
+      become: true
       ansible.builtin.systemd:
         daemon_reload: true
 
     - name: Enable and start systemd timers
+      become: true
       ansible.builtin.systemd:
         name: "{{ item.name }}.timer"
         state: started
@@ -94,6 +104,7 @@
       when: item.has_timer | bool
 
     - name: List registered Ansible timers
+      become: true
       ansible.builtin.command:
         cmd: "systemctl list-timers 'ansible-*' --no-pager"
       register: timers_output

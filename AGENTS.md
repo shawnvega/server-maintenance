@@ -39,8 +39,8 @@ This repository isolates Ansible and its dependencies in a project-local virtual
    * Uses `ansible_remote_tmp=/tmp/.ansible` (writes to `tmpfs` because `/root` is read-only).
    * Never run `apt`, `dpkg`, or `raspi-config` on PiKVM. Updates run strictly via `/usr/bin/pikvm-update --no-reboot`.
 6. **Cockpit Systemd Automation (`192.168.4.5`)**:
-   * Scheduled tasks (`ansible-backup-data`, `ansible-check-btrfs`, `ansible-cleanup`, `ansible-backup-rpi`, `ansible-scrub-btrfs`) run as native systemd timers on Host 5 and are monitored via Cockpit (:9090).
-   * Deploy or update them anytime using `./run.sh deploy-automation`. On-demand master upgrades can be started directly in Cockpit via `ansible-upgrade-all.service`.
+   * Scheduled tasks (`ansible-backup-data`, `ansible-backup-hermes`, `ansible-upgrade-all` nightly at 04:00, `ansible-check-btrfs`, `ansible-cleanup`, `ansible-backup-rpi`, `ansible-scrub-btrfs`) run as native systemd timers on Host 5 and are monitored via Cockpit (:9090).
+   * Deploy or update them anytime using `./run.sh deploy-automation`. On-demand master upgrades can also be started directly in Cockpit via `ansible-upgrade-all.service`.
 7. **Hermes Workspace Permissions (`192.168.4.19`)**:
    * Host data directory `/home/shawn/docker/hermes/data` must strictly be mode `0755` (`go-w`) and owned by UID 1000 (`shawn`). Never set `0777` (world-writable), which fails Hermes internal security gates (`unsafe_control_permissions`) and traps the chat TUI in an endless 30s reconnect loop.
 8. **Ansible `remote_tmp` & Privilege Scoping**:
