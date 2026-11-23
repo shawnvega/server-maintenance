@@ -120,6 +120,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 ./run.sh restart-vlc                     # Restart persistent VLC RTSP stream (.18)
 ./run.sh test-hermes                     # Verify Hermes Gateway, Desktop, TUI grant & LiteLLM
 ./run.sh setup-vnc                       # Install & configure Wayland VNC (wayvnc) & 1500x1000 scaling (.19)
+./run.sh setup-tailscale                 # Configure Tailscale remote access & firewalld trust (.19)
 ./run.sh setup-whisper                   # Install & verify local Apple Silicon MLX Whisper daemon (.8)
 ./run.sh check-host5                     # Inspect Host 5 status log
 ./run.sh upgrade-host5 -K                # Trigger detached standalone upgrade for Host 5

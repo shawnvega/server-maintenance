@@ -1,0 +1,86 @@
+---
+- name: Configure Tailscale remote access and firewalld trust on 192.168.4.19
+  hosts: 192.168.4.19
+  gather_facts: false
+
+  vars:
+    tailscale_interface: tailscale0
+    tailscale_operator: shawn
+
+  tasks:
+    - name: Ensure remote Ansible tmp directory is owned by SSH user
+      ansible.builtin.file:
+        path: /tmp/.ansible
+        state: directory
+        mode: "0700"
+
+    - name: Install Tailscale package
+      become: true
+      ansible.builtin.dnf:
+        name: tailscale
+        state: present
+
+    - name: Ensure tailscaled service is enabled and running
+      become: true
+      ansible.builtin.systemd:
+        name: tailscaled.service
+        enabled: true
+        state: started
+
+    - name: Allow non-root management of Tailscale by {{ tailscale_operator }}
+      become: true
+      ansible.builtin.command:
+        cmd: "tailscale set --operator={{ tailscale_operator }}"
+      changed_when: false
+
+    - name: Trust {{ tailscale_interface }} interface in firewalld trusted zone
+      become: true
+      ansible.posix.firewalld:
+        zone: trusted
+        interface: "{{ tailscale_interface }}"
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Query Tailscale IPv4 address and status
+      ansible.builtin.command:
+        cmd: tailscale ip -4
+      register: tailscale_ipv4
+      changed_when: false
+
+    - name: Query Tailscale DNS name
+      ansible.builtin.command:
+        cmd: tailscale status --json
+      register: tailscale_status_json
+      changed_when: false
+
+    - name: Set Tailscale facts
+      ansible.builtin.set_fact:
+        ts_ip: "{{ tailscale_ipv4.stdout | trim }}"
+        ts_dns: "{{ (tailscale_status_json.stdout | from_json).Self.DNSName | regex_replace('\\.$', '') }}"
+
+    - name: Verify host services are reachable via Tailscale IP ({{ ts_ip }})
+      ansible.builtin.wait_for:
+        host: "{{ ts_ip }}"
+        port: "{{ item.port }}"
+        timeout: 10
+      loop:
+        - { name: "SSH", port: 22 }
+        - { name: "Open-WebUI", port: 3000 }
+        - { name: "wayvnc", port: 5900 }
+        - { name: "noVNC", port: 6080 }
+        - { name: "Hermes API", port: 8642 }
+        - { name: "Cockpit", port: 9090 }
+        - { name: "Hermes Gateway", port: 9119 }
+
+    - name: Display Tailscale remote access endpoints
+      ansible.builtin.debug:
+        msg:
+          - "Tailscale IPv4: {{ ts_ip }}"
+          - "MagicDNS Hostname: {{ ts_dns }}"
+          - "SSH: ssh shawn@{{ ts_ip }} (or ssh shawn@{{ ts_dns }})"
+          - "noVNC Desktop (HTTPS): https://{{ ts_ip }}:6080"
+          - "VNC Client (TigerVNC/Screen Sharing): {{ ts_ip }}:5900"
+          - "Hermes Dashboard: http://{{ ts_ip }}:9119"
+          - "Open-WebUI: http://{{ ts_ip }}:3000"
+          - "Cockpit Web Console: https://{{ ts_ip }}:9090"
