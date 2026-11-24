@@ -159,9 +159,8 @@ Credentials persist across container recreations in `/home/shawn/docker/hermes/d
 * **Symptom**: Microphone button is disabled or fails to capture audio in the browser.
 * **Root Cause**: Browsers block `getUserMedia` on plain HTTP origins (`http://192.168.4.19:9119`).
 * **Resolution**:
-  1. In Chrome/Edge, navigate to `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
-  2. Enable the flag, add `http://192.168.4.19:9119`, and restart the browser.
-  3. Ensure local MLX Whisper is provisioned with `./run.sh setup-whisper`.
+  1. Access the dashboard over HTTPS at `https://hermestui.vvvega.com/` (or in Chrome/Edge, navigate to `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, enable the flag, add `http://192.168.4.19:9119`, and restart the browser).
+  2. Ensure local MLX Whisper is provisioned with `./run.sh setup-whisper`.
 
 ### 5. Automated Health Verification
 Run the automated end-to-end test suite:
@@ -179,7 +178,7 @@ Verifies gateway bootstrap grant, LiteLLM model listing, test inference completi
 | **Open-WebUI Dashboard** | `http://192.168.4.19:3000/` | Initial admin onboarding | Full-featured ChatGPT-style interface with `hermes-agent` and LiteLLM models |
 | **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer token (`API_SERVER_KEY`) | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
 | **Hermes Desktop Webapp** | `https://hermes.vvvega.com/`<br>`http://192.168.4.19:9120/` | User: `admin` / Pass: `hermesadmin` | Full Desktop workspace in a browser (proxied via Caddy on `.5`, restricted to Tailscale & LAN) |
-| **Hermes Gateway Dashboard** | `http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace (LAN/Tailscale) |
+| **Hermes Gateway Dashboard** | `https://hermestui.vvvega.com/`<br>`http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace (proxied via Caddy on `.5`, restricted to Tailscale & LAN) |
 | **Hermes Virtual Desktop** | `http://192.168.4.19:6081/` | None (sandboxed, `desktop` profile) | noVNC graphical browser/desktop environment |
 | **macOS Native App** | `/Applications/Hermes.app` | Gateway URL: `http://192.168.4.19:9119` | Remote gateway client |
 

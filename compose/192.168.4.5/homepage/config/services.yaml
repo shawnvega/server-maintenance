@@ -52,7 +52,7 @@
         container: litellm
     - Hermes Desktop:
         icon: hermes.png
-        href: http://192.168.4.19:6081
+        href: http://192.168.4.19:9120/
         description: Optional Agent Sandbox Desktop (Fedora)
         ping: 192.168.4.19
     - Hermes Gateway:

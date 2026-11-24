@@ -35,6 +35,21 @@ hermes.vvvega.com {
 	}
 }
 
+hermestui.vvvega.com {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
+	@blocked not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48 192.168.4.0/24 127.0.0.1 ::1
+	respond @blocked "403 Forbidden - Tailscale or LAN connection required" 403 {
+		close
+	}
+
+	reverse_proxy 192.168.4.19:9119 {
+		header_up Host {host}
+	}
+}
+
 www.vvvega.com {
 	tls {
 		dns cloudflare {env.CF_API_TOKEN}

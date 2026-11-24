@@ -16,6 +16,7 @@ Host `192.168.4.5` runs Caddy natively as a systemd service (`caddy.service`), p
   | `http://192.168.4.5` | `http://127.0.0.1:3001` | Homepage homelab dashboard |
   | `immich.vvvega.com` | `http://192.168.4.4:2283` | Immich photo & video server |
   | `hermes.vvvega.com` | `http://192.168.4.19:9120` | Hermes Desktop Webapp & WebSocket (restricted to Tailscale `100.64.0.0/10` & LAN `192.168.4.0/24`; public IPs receive `403`) |
+  | `hermestui.vvvega.com` | `http://192.168.4.19:9119` | Hermes Gateway Dashboard & TUI (restricted to Tailscale `100.64.0.0/10` & LAN `192.168.4.0/24`; public IPs receive `403`) |
   | `www.vvvega.com` | `503 Service Unavailable` | Static decommission response (WordPress removed) |
 * **Validation, Cloudflare DNS-01 & Zero-Downtime Reload**:
   1. Loads `vault_cloudflare_api_token` from `vars/vault.yml` and writes it to `/etc/caddy/caddy.env` (`0640` `root:caddy`), loaded via `/etc/systemd/system/caddy.service.d/cloudflare.conf`.
