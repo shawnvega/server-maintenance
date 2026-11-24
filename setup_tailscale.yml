@@ -72,6 +72,7 @@
         - { name: "Hermes API", port: 8642 }
         - { name: "Cockpit", port: 9090 }
         - { name: "Hermes Gateway", port: 9119 }
+        - { name: "Hermes Webapp", port: 9120 }
 
     - name: Display Tailscale remote access endpoints
       ansible.builtin.debug:
@@ -82,5 +83,6 @@
           - "noVNC Desktop (HTTPS): https://{{ ts_ip }}:6080"
           - "VNC Client (TigerVNC/Screen Sharing): {{ ts_ip }}:5900"
           - "Hermes Dashboard: http://{{ ts_ip }}:9119"
+          - "Hermes Webapp: http://{{ ts_ip }}:9120"
           - "Open-WebUI: http://{{ ts_ip }}:3000"
           - "Cockpit Web Console: https://{{ ts_ip }}:9090"

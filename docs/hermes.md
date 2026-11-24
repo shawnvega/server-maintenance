@@ -10,7 +10,7 @@ Host `192.168.4.19` (Fedora Linux 43 x86_64, Btrfs root) runs a dual-container a
 
 | Container | Port | Role & Image | Resource Allocation |
 |---|---|---|---|
-| **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 2.5`, `mem_limit: 5120m`, `mem_reservation: 1024m` |
+| **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 2.5`, `mem_limit: 6144m`, `mem_reservation: 1024m` |
 | **`hermes-desktop`** | `6081` (HTTP/VNC, `desktop` profile) | Optional unprivileged sandbox for browser/UI automation (`hermes-desktop:minimal`): `Xvfb` (:1, 1280x800), `openbox`, `chromium` (`--no-sandbox`), `noVNC` | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 | **`open-webui`** | `3000` (HTTP WebUI) | Feature-rich AI chat interface connected to Hermes Agent (`:8642`) and LiteLLM (`:4000`) (`ghcr.io/open-webui/open-webui:main`) | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 
@@ -178,7 +178,8 @@ Verifies gateway bootstrap grant, LiteLLM model listing, test inference completi
 |---|---|---|---|
 | **Open-WebUI Dashboard** | `http://192.168.4.19:3000/` | Initial admin onboarding | Full-featured ChatGPT-style interface with `hermes-agent` and LiteLLM models |
 | **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer token (`API_SERVER_KEY`) | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
-| **Hermes Gateway Web UI** | `http://192.168.4.19:9119/`<br>`https://hermes.vvvega.com/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace (proxied via Caddy on `.5`, restricted to Tailscale & LAN) |
+| **Hermes Desktop Webapp** | `https://hermes.vvvega.com/`<br>`http://192.168.4.19:9120/` | User: `admin` / Pass: `hermesadmin` | Full Desktop workspace in a browser (proxied via Caddy on `.5`, restricted to Tailscale & LAN) |
+| **Hermes Gateway Dashboard** | `http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace (LAN/Tailscale) |
 | **Hermes Virtual Desktop** | `http://192.168.4.19:6081/` | None (sandboxed, `desktop` profile) | noVNC graphical browser/desktop environment |
 | **macOS Native App** | `/Applications/Hermes.app` | Gateway URL: `http://192.168.4.19:9119` | Remote gateway client |
 

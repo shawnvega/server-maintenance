@@ -30,7 +30,7 @@ hermes.vvvega.com {
 		close
 	}
 
-	reverse_proxy 192.168.4.19:9119 {
+	reverse_proxy 192.168.4.19:9120 {
 		header_up Host {host}
 	}
 }

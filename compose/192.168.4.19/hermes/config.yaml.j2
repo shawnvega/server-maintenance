@@ -34,6 +34,19 @@ tts:
   edge:
     voice: {{ hermes_tts_voice | default('en-US-AriaNeural') }}
 
+dashboard:
+  trusted_proxies:
+    - 192.168.4.5
+  plugins:
+    kanban:
+      enabled: true
+
+webapp:
+  enabled: true
+  host: 0.0.0.0
+  port: 9120
+  public_url: https://hermes.vvvega.com
+
 compression:
   enabled: true
   threshold_tokens: 65536
