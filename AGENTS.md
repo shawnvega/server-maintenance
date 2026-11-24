@@ -9,7 +9,7 @@ This repository manages automation and configuration for self-hosted home server
 | `192.168.4.4` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | OpenMediaVault (`:80`/`:443`), `glances`, `immich`, `jellyfin`, `syncthing` |
 | `192.168.4.5` | `shawn` | Debian (Pi OS) | `rpi-clone` (`/dev/mmcblk0`) | Read/Write | Cockpit (`:9090`), `glances`, `homepage` (`:3001` & `:80`), `immich-ml`, `litellm` (`:4000`), native Caddy, Cockpit systemd automation timers |
 | `192.168.4.18` | `shawn` | Debian / Ubuntu | Btrfs RAID 1 (`/var`) | Read/Write (`/` on eMMC, `/var` on Btrfs RAID 1) | `glances`, persistent VLC stream (`snap` vlc) |
-| `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `hermes` (gateway `:9119`, API server `:8642`, optional desktop `:6081`), `open-webui` (`:3000`), host `wayvnc`/`noVNC` (`:5900`/`:6080`) |
+| `192.168.4.19` | `shawn` | Fedora (`dnf`) | Dual-tier (Local HDD + Pi 5) | Read/Write | Cockpit (`:9090`), `glances0`, `hermes` (gateway `:9119`, API server `:8642`, optional desktop `:6081`), host `wayvnc`/`noVNC` (`:5900`/`:6080`) |
 | `192.168.4.11` | `shawn` | Debian (Pi OS) | None | **Read-Only (OverlayFS & Boot Protection)** | `pi2beink`, `glances` (`:61208`) |
 | `192.168.4.66` | `root` | Arch Linux ARM | None | **Read-Only (Native ext4/vfat ro)** | PiKVM (`kvmd`) |
 | `192.168.4.15` | `u0_a287` | Android (Termux / PRoot Debian) | None | Read/Write | Hermes Agent (dashboard `:9119`), `faster-whisper` (`:8081`), `esphome` / `esphome-builder` (`:6055`), Termux OpenSSH (`:8022`) |
@@ -72,7 +72,7 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 | Skill | Scope | References / Scripts |
 |---|---|---|
 | [`server-management`](.agents/skills/server-management/SKILL.md) | Ansible upgrades, `rpi-clone`, Btrfs scrubs, RO Pi / PiKVM, Cockpit automation | Links to `docs/` |
-| [`setup-hermes`](.agents/skills/setup-hermes/SKILL.md) | Hermes Gateway & Desktop (`.19`), Open-WebUI, LiteLLM (`.5`) | `references/gotchas.md`, `references/ecosystem-research.md`, `scripts/verify_hermes.sh` |
+| [`setup-hermes`](.agents/skills/setup-hermes/SKILL.md) | Hermes Gateway & Desktop (`.19`), LiteLLM (`.5`) | `references/gotchas.md`, `references/ecosystem-research.md`, `scripts/verify_hermes.sh` |
 | [`setup-homepage`](.agents/skills/setup-homepage/SKILL.md) | Homepage dashboard & Caddy reverse proxy (`.5`) | `references/gotchas.md`, `scripts/verify_homepage.sh` |
 | [`openclaw-setup`](.agents/skills/openclaw-setup/SKILL.md) | OpenClaw UTM VMs (`.64.6`, `.64.9`), host Mac Ollama & PF firewall | `references/config-and-context.md`, `references/troubleshooting.md`, `references/whisper-cpp.md` |
 | [`mlx-whisper`](.agents/skills/mlx-whisper/SKILL.md) | Apple Silicon MLX Whisper STT daemon (`.8:8080`) & LiteLLM audio routes | — |
@@ -112,7 +112,6 @@ Deep architectural and operational documentation is organized in `docs/`. **Read
 
 # Service Maintenance
 ./run.sh homepage                      # Deploy & update Homepage dashboard (.5)
-./run.sh open-webui                    # Deploy & update Open-WebUI AI chat (.19)
 ./run.sh hermes                        # Deploy & update Hermes Agent stack (.19)
 ./run.sh litellm                       # Deploy & update LiteLLM AI Gateway (.5)
 ./run.sh caddy                           # Validate & reload native Caddy reverse proxy

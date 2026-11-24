@@ -39,11 +39,6 @@
         icon: home-assistant.png
         href: http://homeassistant.local:8123/
         description: Home Automation & Smart Devices
-    - Open-WebUI:
-        icon: open-webui.png
-        href: http://192.168.4.19:3000
-        description: AI Chat & Hermes Agent Interface (Fedora)
-        ping: 192.168.4.19
     - LiteLLM Proxy:
         icon: sh-litellm.png
         href: http://192.168.4.5:4000

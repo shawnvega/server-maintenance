@@ -12,9 +12,8 @@ Host `192.168.4.19` (Fedora Linux 43 x86_64, Btrfs root) runs a dual-container a
 |---|---|---|---|
 | **`hermes-gateway`** | `9119` (HTTP/WS)<br>`8642` (OpenAI API) | Agent runtime, CLI, tool execution engine, web dashboard, OpenAI API server (`hermes-gateway:custom`) | `cpus: 2.5`, `mem_limit: 6144m`, `mem_reservation: 1024m` |
 | **`hermes-desktop`** | `6081` (HTTP/VNC, `desktop` profile) | Optional unprivileged sandbox for browser/UI automation (`hermes-desktop:minimal`): `Xvfb` (:1, 1280x800), `openbox`, `chromium` (`--no-sandbox`), `noVNC` | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
-| **`open-webui`** | `3000` (HTTP WebUI) | Feature-rich AI chat interface connected to Hermes Agent (`:8642`) and LiteLLM (`:4000`) (`ghcr.io/open-webui/open-webui:main`) | `cpus: 1.0`, `mem_limit: 1536m`, `mem_reservation: 512m` |
 
-* **Host Headroom**: Container resource limits preserve ~3GB RAM for the Fedora host, desktop services, and `open-webui`.
+* **Host Headroom**: Container resource limits preserve ~3GB RAM for the Fedora host and desktop services.
 * **Android / Gradle Build Defaults**: `Dockerfile.gateway` pre-installs OpenJDK 21, Gradle 8.12.1, and Kotlin 2.1.10 with `GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=384m\""` to keep Android builds comfortably within the `5120m` container limit.
 * **Shared Storage**: Host directory `/home/shawn/docker/hermes/data` is mounted to `/opt/data` in `hermes-gateway` and `/home/hermes/workspace` in `hermes-desktop`.
 
@@ -167,15 +166,14 @@ Run the automated end-to-end test suite:
 ```bash
 ./run.sh test-hermes
 ```
-Verifies gateway bootstrap grant, LiteLLM model listing, test inference completion, STT routes, Hermes OpenAI API server (`:8642`), and Open-WebUI (`:3000`).
+Verifies gateway bootstrap grant, LiteLLM model listing, test inference completion, STT routes, and Hermes OpenAI API server (`:8642`).
 
 ---
 
-## 5. Open-WebUI & Client Endpoints
+## 5. Client Endpoints
 
 | Client / Interface | URL / Endpoint | Credentials | Role |
 |---|---|---|---|
-| **Open-WebUI Dashboard** | `http://192.168.4.19:3000/` | Initial admin onboarding | Full-featured ChatGPT-style interface with `hermes-agent` and LiteLLM models |
 | **Hermes OpenAI API** | `http://192.168.4.19:8642/v1` | Bearer token (`API_SERVER_KEY`) | OpenAI-compatible endpoint serving `/v1/models` and `/v1/chat/completions` |
 | **Hermes Desktop Webapp** | `https://hermes.vvvega.com/`<br>`http://192.168.4.19:9120/` | User: `admin` / Pass: `hermesadmin` | Full Desktop workspace in a browser (proxied via Caddy on `.5`, restricted to Tailscale & LAN) |
 | **Hermes Gateway Dashboard** | `https://hermestui.vvvega.com/`<br>`http://192.168.4.19:9119/` | User: `admin` / Pass: `hermesadmin` | Native web dashboard, session viewer, and tool trace (proxied via Caddy on `.5`, restricted to Tailscale & LAN) |

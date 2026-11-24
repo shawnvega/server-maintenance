@@ -14,7 +14,6 @@ LITELLM_PORT="${LITELLM_PORT:-4000}"
 LITELLM_KEY="${LITELLM_KEY:-sk-hermes-mac-secret}"
 HERMES_API_KEY="${HERMES_API_KEY:-800e4dd6423a533409960e90e1b03a6a2d5687ee63ef4ac7f759f425dd1388de}"
 HERMES_API_PORT="${HERMES_API_PORT:-8642}"
-OPENWEBUI_PORT="${OPENWEBUI_PORT:-3000}"
 DEFAULT_MODEL="${DEFAULT_MODEL:-openrouter-free}"
 QUICK_MODE=false
 
@@ -396,17 +395,6 @@ if [[ "${HERMES_API_CODE}" == "200" ]]; then
 else
   fail "Hermes Agent API server returned HTTP ${HERMES_API_CODE} on port ${HERMES_API_PORT}" \
        "Check gateway logs: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs hermes-gateway --tail 40'"
-fi
-
-# 16. Open-WebUI Service (port 3000)
-info "16. Checking Open-WebUI Service on ${TARGET_HOST}:${OPENWEBUI_PORT}..."
-OPENWEBUI_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://${TARGET_HOST}:${OPENWEBUI_PORT}/" 2>/dev/null || echo "000")
-
-if [[ "${OPENWEBUI_CODE}" == "200" ]]; then
-  pass "Open-WebUI web interface is responding on port ${OPENWEBUI_PORT} (HTTP 200)"
-else
-  warn "Open-WebUI returned HTTP ${OPENWEBUI_CODE} on port ${OPENWEBUI_PORT}" \
-       "Verify container: ssh ${SSH_USER}@${TARGET_HOST} 'docker logs open-webui --tail 30'"
 fi
 
 echo ""

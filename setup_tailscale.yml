@@ -66,7 +66,6 @@
         timeout: 10
       loop:
         - { name: "SSH", port: 22 }
-        - { name: "Open-WebUI", port: 3000 }
         - { name: "wayvnc", port: 5900 }
         - { name: "noVNC", port: 6080 }
         - { name: "Hermes API", port: 8642 }
@@ -84,5 +83,4 @@
           - "VNC Client (TigerVNC/Screen Sharing): {{ ts_ip }}:5900"
           - "Hermes Dashboard: http://{{ ts_ip }}:9119"
           - "Hermes Webapp: http://{{ ts_ip }}:9120"
-          - "Open-WebUI: http://{{ ts_ip }}:3000"
           - "Cockpit Web Console: https://{{ ts_ip }}:9090"
