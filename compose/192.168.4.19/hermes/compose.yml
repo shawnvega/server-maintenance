@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.gateway
+      pull: true
     image: hermes-gateway:custom
     container_name: hermes-gateway
     restart: unless-stopped
@@ -52,6 +53,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      pull: true
     image: hermes-desktop:minimal
     container_name: hermes-desktop
     profiles: ["desktop"]

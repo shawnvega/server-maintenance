@@ -216,7 +216,7 @@
           fi
           cd "$stack_dir"
           for attempt in 1 2 3; do
-            if docker compose pull 2>/dev/null; then
+            if docker compose pull --ignore-buildable 2>/dev/null; then
               exit 0
             fi
             echo "docker compose pull failed (attempt $attempt/3). Retrying in 5s..." >&2
